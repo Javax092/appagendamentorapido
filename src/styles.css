@@ -328,6 +328,11 @@ a {
   border-color: rgba(227, 188, 124, 0.22);
 }
 
+.service-card.inactive {
+  opacity: 0.58;
+  border-style: dashed;
+}
+
 .service-topline {
   display: flex;
   justify-content: space-between;

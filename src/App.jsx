@@ -8,6 +8,7 @@ import {
   deleteScheduleBlock,
   getStoredSession,
   saveService,
+  setServiceActive,
   updateAppointment,
   updateAppointmentStatus
 } from "./lib/api";
@@ -78,6 +79,7 @@ function App() {
   const [serviceEditorForm, setServiceEditorForm] = useState(null);
   const [serviceFeedback, setServiceFeedback] = useState("");
   const [isSavingService, setIsSavingService] = useState(false);
+  const [serviceActionId, setServiceActionId] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -133,13 +135,18 @@ function App() {
     }));
   }, [barbers, selectedBarberId, selectedPanelBarberId]);
 
+  const activeServices = useMemo(
+    () => services.filter((service) => service.isActive),
+    [services]
+  );
+
   useEffect(() => {
-    if (!services.length || selectedServiceIds.length) {
+    if (!activeServices.length || selectedServiceIds.length) {
       return;
     }
 
-    setSelectedServiceIds([services[0].id]);
-  }, [services, selectedServiceIds.length]);
+    setSelectedServiceIds([activeServices[0].id]);
+  }, [activeServices, selectedServiceIds.length]);
 
   useEffect(() => {
     if (session?.role === "barber" && session.barberId) {
@@ -470,7 +477,7 @@ function App() {
   }
 
   function resetBookingForm() {
-    setSelectedServiceIds(services[0] ? [services[0].id] : []);
+    setSelectedServiceIds(activeServices[0] ? [activeServices[0].id] : []);
     setSelectedBarberId(barbers[0]?.id ?? "");
     setSelectedDate(dateOptions[0]);
     setSelectedTime("");
@@ -749,6 +756,27 @@ function App() {
     }
   }
 
+  async function handleToggleServiceActive(service) {
+    setServiceActionId(service.id);
+    setServiceFeedback("");
+
+    try {
+      const saved = await setServiceActive(service.id, !service.isActive);
+      setServices((current) =>
+        current.map((item) => (item.id === service.id ? saved.data : item))
+      );
+      if (selectedServiceIds.includes(service.id) && !saved.data.isActive) {
+        setSelectedServiceIds((current) => current.filter((id) => id !== service.id));
+      }
+      setServiceFeedback(saved.data.isActive ? "Servico reativado." : "Servico excluido do catalogo.");
+      beginEditService(saved.data);
+    } catch (error) {
+      setServiceFeedback(error.message || "Nao foi possivel atualizar o servico.");
+    } finally {
+      setServiceActionId("");
+    }
+  }
+
   if (!barbers.length || !services.length) {
     return (
       <div className="app-shell">
@@ -851,7 +879,7 @@ function App() {
             </div>
 
             <div className="service-grid">
-              {services.map((service) => {
+              {activeServices.map((service) => {
                 const active = selectedServiceIds.includes(service.id);
                 return (
                   <button
@@ -1069,10 +1097,10 @@ function App() {
                     {services.map((service) => (
                       <button
                         key={service.id}
-                        className={`service-card ${serviceEditorForm?.id === service.id ? "active" : ""}`}
+                        className={`service-card ${serviceEditorForm?.id === service.id ? "active" : ""} ${service.isActive ? "" : "inactive"}`}
                         onClick={() => beginEditService(service)}
                       >
-                        <span className="tag">{service.badge}</span>
+                        <span className="tag">{service.isActive ? service.badge : "Inativo"}</span>
                         <div className="service-topline">
                           <strong>{service.name}</strong>
                           <span>{formatCurrency(service.price)}</span>
@@ -1171,6 +1199,24 @@ function App() {
                       <button className="primary-button" type="submit" disabled={isSavingService}>
                         {isSavingService ? "Salvando..." : "Salvar servico"}
                       </button>
+                      {serviceEditorForm?.id ? (
+                        <button
+                          className="secondary-button danger-button"
+                          type="button"
+                          onClick={() =>
+                            handleToggleServiceActive(
+                              services.find((service) => service.id === serviceEditorForm.id) ?? serviceEditorForm
+                            )
+                          }
+                          disabled={serviceActionId === serviceEditorForm.id}
+                        >
+                          {serviceActionId === serviceEditorForm.id
+                            ? "Atualizando..."
+                            : services.find((service) => service.id === serviceEditorForm.id)?.isActive
+                              ? "Excluir servico"
+                              : "Restaurar servico"}
+                        </button>
+                      ) : null}
                       <button className="secondary-button" type="button" onClick={beginCreateService}>
                         Novo servico
                       </button>

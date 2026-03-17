@@ -15,7 +15,9 @@ function normalizeService(row) {
     price: Number(row.price ?? 0),
     duration: row.duration,
     category: row.category ?? "",
-    description: row.description ?? ""
+    description: row.description ?? "",
+    isActive: Boolean(row.is_active),
+    sortOrder: row.sort_order ?? 0
   };
 }
 
@@ -138,7 +140,7 @@ export async function bootstrapAppData() {
   const supabase = getSupabaseClient();
   const [barbersResult, servicesResult, appointmentsResult, blocksResult] = await Promise.all([
     supabase.from(BARBERS_TABLE).select("*").eq("is_active", true).order("sort_order", { ascending: true }),
-    supabase.from(SERVICES_TABLE).select("*").eq("is_active", true).order("sort_order", { ascending: true }),
+    supabase.from(SERVICES_TABLE).select("*").order("sort_order", { ascending: true }),
     supabase
       .from(APPOINTMENTS_TABLE)
       .select("*")
@@ -292,6 +294,32 @@ export async function saveService(service, existingService = null) {
     : supabase.from(SERVICES_TABLE).insert(payload);
 
   const { data, error } = await query.select().single();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    source: "supabase",
+    data: normalizeService(data)
+  };
+}
+
+export async function setServiceActive(serviceId, isActive) {
+  if (!isSupabaseConfigured()) {
+    return {
+      source: "local",
+      data: { id: serviceId, isActive }
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(SERVICES_TABLE)
+    .update({ is_active: isActive })
+    .eq("id", serviceId)
+    .select()
+    .single();
 
   if (error) {
     throw error;
