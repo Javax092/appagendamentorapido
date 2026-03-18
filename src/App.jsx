@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { AdminView } from "./components/AdminView";
+import { AppHeader } from "./components/AppHeader";
+import { AutomationsView } from "./components/AutomationsView";
+import { BookingView } from "./components/BookingView";
+import { GalleryStrip } from "./components/GalleryStrip";
+import { PanelView } from "./components/PanelView";
+import { TabBar } from "./components/TabBar";
+import { WhatsappView } from "./components/WhatsappView";
 import {
   authenticateStaff,
   bootstrapAppData,
@@ -6,21 +14,29 @@ import {
   createAppointment,
   createScheduleBlock,
   deleteScheduleBlock,
-  getStoredSession,
+  getCurrentSessionProfile,
+  logAppEvent,
+  processNotificationQueue,
+  requestPasswordReset,
+  resetStaffPassword,
   saveService,
+  saveBrandSettings,
+  saveGalleryPost,
+  saveStaffAppointment,
+  saveStaffMember,
   setServiceActive,
-  updateAppointment,
-  updateAppointmentStatus
+  setGalleryPostActive,
+  toggleStaffMemberActive,
+  updateOwnPassword,
+  updateAppointmentStatus,
+  updateCustomerNotes,
+  uploadMediaAsset
 } from "./lib/api";
+import { subscribeToAuthChanges } from "./lib/supabase";
 import {
   buildAppointmentEnd,
-  buildBookingCode,
   buildWhatsAppLink,
   createDateOptions,
-  formatCurrency,
-  formatDateLabel,
-  formatLongDate,
-  generateTimeSlots,
   getServiceTotals,
   groupAppointmentsByBarber,
   timeToMinutes
@@ -38,18 +54,60 @@ const blockInitialState = {
   isAllDay: false,
   notes: ""
 };
-
-const roleLabels = {
-  client: "Cliente",
-  barber: "Barbeiro",
-  admin: "Admin"
+const emptyBrandConfig = {
+  logoText: "O Pai ta on",
+  businessWhatsapp: "5592986202729",
+  metaWebhookConfigured: false
 };
+const emptyStaffForm = {
+  id: "",
+  fullName: "",
+  email: "",
+  role: "barber",
+  barberId: "",
+  password: "",
+  isActive: true
+};
+const emptyGalleryPostForm = {
+  id: "",
+  title: "",
+  caption: "",
+  tag: "",
+  imagePath: "",
+  imageUrl: "",
+  sortOrder: 1,
+  isActive: true
+};
+
+function getAppointmentServiceList(appointment, services) {
+  if (appointment.services?.length) {
+    return appointment.services;
+  }
+
+  return services
+    .filter((service) => appointment.serviceIds.includes(service.id))
+    .map((service) => ({
+      id: service.id,
+      name: service.name,
+      price: service.price,
+      duration: service.duration,
+      sortOrder: service.sortOrder
+    }));
+}
 
 function App() {
   const [barbers, setBarbers] = useState([]);
   const [services, setServices] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [bookingEvents, setBookingEvents] = useState([]);
   const [scheduleBlocks, setScheduleBlocks] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [galleryPosts, setGalleryPosts] = useState([]);
+  const [brandConfig, setBrandConfig] = useState(emptyBrandConfig);
+  const [brandEditor, setBrandEditor] = useState(emptyBrandConfig);
   const [selectedBarberId, setSelectedBarberId] = useState("");
   const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
@@ -67,7 +125,7 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [statusUpdateId, setStatusUpdateId] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [session, setSession] = useState(() => getStoredSession());
+  const [session, setSession] = useState(null);
   const [loginForm, setLoginForm] = useState(loginInitialState);
   const [authError, setAuthError] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -80,40 +138,78 @@ function App() {
   const [serviceFeedback, setServiceFeedback] = useState("");
   const [isSavingService, setIsSavingService] = useState(false);
   const [serviceActionId, setServiceActionId] = useState("");
+  const [customerDrafts, setCustomerDrafts] = useState({});
+  const [customerActionId, setCustomerActionId] = useState("");
+  const [staffForm, setStaffForm] = useState(emptyStaffForm);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffActionId, setStaffActionId] = useState("");
+  const [staffFeedback, setStaffFeedback] = useState("");
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [queueFeedback, setQueueFeedback] = useState("");
+  const [isSavingBrand, setIsSavingBrand] = useState(false);
+  const [galleryEditorForm, setGalleryEditorForm] = useState(emptyGalleryPostForm);
+  const [isSavingGalleryPost, setIsSavingGalleryPost] = useState(false);
+  const [galleryActionId, setGalleryActionId] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [passwordResetFeedback, setPasswordResetFeedback] = useState("");
+  const [isRequestingPasswordReset, setIsRequestingPasswordReset] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [isFinishingRecovery, setIsFinishingRecovery] = useState(false);
+
+  async function refreshData(sessionProfileOverride) {
+    setIsLoading(true);
+    setLoadError("");
+
+    try {
+      const resolvedSession =
+        sessionProfileOverride === undefined ? await getCurrentSessionProfile() : sessionProfileOverride;
+      const data = await bootstrapAppData(resolvedSession);
+      setSession(resolvedSession);
+      setBarbers(data.barbers);
+      setServices(data.services);
+      setAppointments(data.appointments);
+      setBookingEvents(data.bookingEvents);
+      setScheduleBlocks(data.scheduleBlocks);
+      setCustomers(data.customers);
+      setNotifications(data.notifications);
+      setStaffMembers(data.staffMembers);
+      setLogs(data.logs);
+      setGalleryPosts(data.galleryPosts);
+      setBrandConfig(data.brandConfig);
+      setBrandEditor(data.brandConfig);
+      setGalleryEditorForm((current) =>
+        current.id ? current : data.galleryPosts[0] ?? emptyGalleryPostForm
+      );
+    } catch (error) {
+      setLoadError(error.message || "Falha ao carregar os dados da operacao.");
+      await logAppEvent({
+        level: "error",
+        eventType: "app.bootstrap_failed",
+        message: error.message || "Falha ao carregar o app"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let ignore = false;
+    refreshData();
+  }, []);
 
-    async function loadData() {
-      setIsLoading(true);
-      setLoadError("");
-
-      try {
-        const data = await bootstrapAppData();
-        if (ignore) {
-          return;
-        }
-
-        setBarbers(data.barbers);
-        setServices(data.services);
-        setAppointments(data.appointments);
-        setScheduleBlocks(data.scheduleBlocks);
-      } catch (error) {
-        if (!ignore) {
-          setLoadError(error.message || "Falha ao carregar os dados da operacao.");
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecoveryMode(true);
+        setPasswordResetFeedback("");
       }
+    });
+
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      setIsRecoveryMode(true);
     }
 
-    loadData();
-
-    return () => {
-      ignore = true;
-    };
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -135,35 +231,73 @@ function App() {
     }));
   }, [barbers, selectedBarberId, selectedPanelBarberId]);
 
-  const activeServices = useMemo(
-    () => services.filter((service) => service.isActive),
-    [services]
-  );
-
-  useEffect(() => {
-    if (!activeServices.length || selectedServiceIds.length) {
-      return;
-    }
-
-    setSelectedServiceIds([activeServices[0].id]);
-  }, [activeServices, selectedServiceIds.length]);
-
   useEffect(() => {
     if (session?.role === "barber" && session.barberId) {
       setSelectedPanelBarberId(session.barberId);
     }
   }, [session]);
 
+  const selectedBarber = useMemo(
+    () => barbers.find((barber) => barber.id === selectedBarberId) ?? null,
+    [barbers, selectedBarberId]
+  );
+
+  const bookingServices = useMemo(
+    () =>
+      services
+        .filter((service) => service.barberId === selectedBarberId && service.isActive)
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)),
+    [selectedBarberId, services]
+  );
+
+  useEffect(() => {
+    if (!bookingServices.length) {
+      setSelectedServiceIds([]);
+      return;
+    }
+
+    setSelectedServiceIds((current) => {
+      const valid = current.filter((serviceId) => bookingServices.some((service) => service.id === serviceId));
+      return valid.length ? valid : [bookingServices[0].id];
+    });
+    setSelectedTime("");
+  }, [bookingServices]);
+
+  const selectedServices = useMemo(
+    () => bookingServices.filter((service) => selectedServiceIds.includes(service.id)),
+    [bookingServices, selectedServiceIds]
+  );
+
+  const totals = useMemo(() => getServiceTotals(selectedServices), [selectedServices]);
+  const bookingSchedule = appointments.length ? appointments : bookingEvents;
+  const appointmentsByBarber = useMemo(() => groupAppointmentsByBarber(appointments), [appointments]);
+
+  const availableSlots = useMemo(() => {
+    if (!selectedBarber || !selectedServices.length) {
+      return [];
+    }
+
+    return createTimeSlots({
+      barber: selectedBarber,
+      date: selectedDate,
+      totalDuration: totals.totalDuration,
+      appointments: bookingSchedule,
+      scheduleBlocks
+    });
+  }, [bookingSchedule, scheduleBlocks, selectedBarber, selectedDate, selectedServices.length, totals.totalDuration]);
+
   const tabs = useMemo(() => {
-    const items = [{ id: "booking", label: "Agenda" }];
+    const items = [{ id: "booking", label: "Reservas" }];
 
     if (session?.role === "barber") {
       items.push({ id: "panel", label: "Minha agenda" });
+      items.push({ id: "automations", label: "Automacoes" });
       items.push({ id: "whatsapp", label: "WhatsApp" });
     }
 
     if (session?.role === "admin") {
       items.push({ id: "panel", label: "Equipe" });
+      items.push({ id: "automations", label: "Automacoes" });
       items.push({ id: "whatsapp", label: "WhatsApp" });
       items.push({ id: "admin", label: "Gestao" });
     }
@@ -173,51 +307,44 @@ function App() {
 
   useEffect(() => {
     if (!tabs.some((tab) => tab.id === activeView)) {
-      setActiveView(tabs[0]?.id ?? "booking");
+      setActiveView("booking");
     }
   }, [activeView, tabs]);
-
-  const selectedBarber = useMemo(
-    () => barbers.find((barber) => barber.id === selectedBarberId) ?? null,
-    [barbers, selectedBarberId]
-  );
 
   const selectedPanelBarber = useMemo(
     () => barbers.find((barber) => barber.id === selectedPanelBarberId) ?? null,
     [barbers, selectedPanelBarberId]
   );
 
-  const selectedServices = useMemo(
-    () => services.filter((service) => selectedServiceIds.includes(service.id)),
-    [services, selectedServiceIds]
+  const managedBarberId = session?.role === "barber" ? session.barberId : selectedPanelBarberId;
+
+  const managedServices = useMemo(
+    () =>
+      services
+        .filter((service) => service.barberId === managedBarberId)
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)),
+    [managedBarberId, services]
   );
 
-  const totals = useMemo(() => getServiceTotals(selectedServices), [selectedServices]);
-
-  const appointmentsByBarber = useMemo(
-    () => groupAppointmentsByBarber(appointments),
-    [appointments]
-  );
-
-  const availableSlots = useMemo(() => {
-    if (!selectedBarber || !selectedServices.length) {
-      return [];
+  useEffect(() => {
+    if (!session || !managedBarberId) {
+      return;
     }
 
-    return generateTimeSlots({
-      barber: selectedBarber,
-      date: selectedDate,
-      totalDuration: totals.totalDuration,
-      appointments,
-      scheduleBlocks
+    setServiceEditorForm((current) => {
+      if (!current || current.barberId !== managedBarberId) {
+        return createEmptyServiceDraft(managedBarberId);
+      }
+
+      return current;
     });
-  }, [appointments, scheduleBlocks, selectedBarber, selectedDate, selectedServices.length, totals.totalDuration]);
+  }, [managedBarberId, session]);
 
   const panelAppointments = useMemo(() => {
     const scopeBarberId = session?.role === "barber" ? session.barberId : selectedPanelBarberId;
-    const barberAppointments = appointmentsByBarber[scopeBarberId] ?? [];
+    const scopedAppointments = appointmentsByBarber[scopeBarberId] ?? [];
 
-    return barberAppointments.slice().sort((left, right) => {
+    return scopedAppointments.slice().sort((left, right) => {
       if (left.date !== right.date) {
         return left.date.localeCompare(right.date);
       }
@@ -233,6 +360,14 @@ function App() {
 
     return appointments;
   }, [appointments, session]);
+
+  const visibleNotifications = useMemo(() => {
+    if (session?.role === "barber") {
+      return notifications.filter((notification) => notification.barberId === session.barberId);
+    }
+
+    return notifications;
+  }, [notifications, session]);
 
   const adminAppointments = useMemo(() => {
     return appointments
@@ -263,28 +398,23 @@ function App() {
 
   const adminStats = useMemo(() => {
     const billableAppointments = appointments.filter((appointment) => appointment.status !== "cancelled");
-    const confirmed = appointments.filter((appointment) => appointment.status === "confirmed");
-    const cancelled = appointments.filter((appointment) => appointment.status === "cancelled");
-    const completed = appointments.filter((appointment) => appointment.status === "completed");
     const todayAppointments = billableAppointments.filter((appointment) => appointment.date === dateOptions[0]);
     const grossRevenue = billableAppointments.reduce((sum, appointment) => sum + appointment.totalPrice, 0);
     const todayRevenue = todayAppointments.reduce((sum, appointment) => sum + appointment.totalPrice, 0);
     const averageTicket = billableAppointments.length ? grossRevenue / billableAppointments.length : 0;
-
     const revenueByBarber = barbers.map((barber) => ({
       barber,
       revenue: billableAppointments
         .filter((appointment) => appointment.barberId === barber.id)
         .reduce((sum, appointment) => sum + appointment.totalPrice, 0)
     }));
-
     const topBarber = revenueByBarber.sort((left, right) => right.revenue - left.revenue)[0];
 
     return {
       total: appointments.length,
-      confirmed: confirmed.length,
-      cancelled: cancelled.length,
-      completed: completed.length,
+      confirmed: appointments.filter((appointment) => appointment.status === "confirmed").length,
+      cancelled: appointments.filter((appointment) => appointment.status === "cancelled").length,
+      completed: appointments.filter((appointment) => appointment.status === "completed").length,
       today: todayAppointments.length,
       grossRevenue,
       todayRevenue,
@@ -296,7 +426,6 @@ function App() {
   const occupancyStats = useMemo(() => {
     const date = dateOptions[0];
     let availableMinutes = 0;
-    let bookedMinutes = 0;
 
     barbers.forEach((barber) => {
       const day = new Date(`${date}T12:00:00`).getDay();
@@ -304,19 +433,13 @@ function App() {
         return;
       }
 
-      let minutes =
-        timeToMinutes(barber.workingHours.end) -
-        timeToMinutes(barber.workingHours.start);
-
+      let minutes = timeToMinutes(barber.workingHours.end) - timeToMinutes(barber.workingHours.start);
       minutes -= barber.breakRanges.reduce(
         (sum, range) => sum + (timeToMinutes(range.end) - timeToMinutes(range.start)),
         0
       );
 
-      const blocks = scheduleBlocks.filter(
-        (block) => block.date === date && (block.barberId === barber.id || !block.barberId)
-      );
-
+      const blocks = scheduleBlocks.filter((block) => block.date === date && block.barberId === barber.id);
       minutes -= blocks.reduce((sum, block) => {
         if (block.isAllDay) {
           return timeToMinutes(barber.workingHours.end) - timeToMinutes(barber.workingHours.start);
@@ -328,7 +451,7 @@ function App() {
       availableMinutes += Math.max(minutes, 0);
     });
 
-    bookedMinutes = appointments
+    const bookedMinutes = bookingSchedule
       .filter((appointment) => appointment.date === date && appointment.status !== "cancelled")
       .reduce((sum, appointment) => sum + (timeToMinutes(appointment.endTime) - timeToMinutes(appointment.startTime)), 0);
 
@@ -337,32 +460,35 @@ function App() {
       bookedMinutes,
       rate: availableMinutes ? Math.min((bookedMinutes / availableMinutes) * 100, 100) : 0
     };
-  }, [appointments, barbers, scheduleBlocks]);
-
-  const upcomingBlocks = useMemo(
-    () =>
-      scheduleBlocks
-        .slice()
-        .sort((left, right) => {
-          if (left.date !== right.date) {
-            return left.date.localeCompare(right.date);
-          }
-
-          return (left.startTime || "00:00").localeCompare(right.startTime || "00:00");
-        }),
-    [scheduleBlocks]
-  );
-
-  const summaryServices = selectedServices.map((service) => service.name).join(", ");
+  }, [barbers, bookingSchedule, scheduleBlocks]);
 
   const editorBarber = useMemo(
     () => barbers.find((barber) => barber.id === editorForm?.barberId) ?? null,
     [barbers, editorForm]
   );
 
-  const editorServices = useMemo(
-    () => services.filter((service) => editorForm?.serviceIds?.includes(service.id)),
+  const editorServicesCatalog = useMemo(
+    () => services.filter((service) => service.barberId === editorForm?.barberId && service.isActive),
     [editorForm, services]
+  );
+
+  useEffect(() => {
+    if (!editorForm) {
+      return;
+    }
+
+    const validServiceIds = editorForm.serviceIds.filter((serviceId) =>
+      editorServicesCatalog.some((service) => service.id === serviceId)
+    );
+
+    if (validServiceIds.length !== editorForm.serviceIds.length) {
+      setEditorForm((current) => (current ? { ...current, serviceIds: validServiceIds, startTime: "" } : current));
+    }
+  }, [editorForm, editorServicesCatalog]);
+
+  const editorServices = useMemo(
+    () => editorServicesCatalog.filter((service) => editorForm?.serviceIds?.includes(service.id)),
+    [editorForm, editorServicesCatalog]
   );
 
   const editorTotals = useMemo(() => getServiceTotals(editorServices), [editorServices]);
@@ -372,7 +498,7 @@ function App() {
       return [];
     }
 
-    return generateTimeSlots({
+    return createTimeSlots({
       barber: editorBarber,
       date: editorForm.date,
       totalDuration: editorTotals.totalDuration,
@@ -382,103 +508,52 @@ function App() {
     });
   }, [appointments, editorBarber, editorForm, editorServices.length, editorTotals.totalDuration, scheduleBlocks]);
 
+  const summaryServices = selectedServices.map((service) => service.name).join(", ");
+  const queuedNotifications = visibleNotifications.filter((item) => item.status === "queued");
+
   function hydrateAppointmentView(baseAppointment) {
     const barber = barbers.find((item) => item.id === baseAppointment.barberId);
-    const appointmentServices = services.filter((service) =>
-      baseAppointment.serviceIds.includes(service.id)
-    );
-    const appointmentTotals = getServiceTotals(appointmentServices);
-    const subtotal = baseAppointment.totalPrice || appointmentTotals.subtotal;
+    const appointmentServices = getAppointmentServiceList(baseAppointment, services);
+    const subtotal =
+      baseAppointment.totalPrice ||
+      appointmentServices.reduce((sum, service) => sum + Number(service.price ?? 0), 0);
 
     return {
       ...baseAppointment,
       barber,
       services: appointmentServices,
       subtotal,
-      serviceDuration: appointmentTotals.serviceDuration,
-      totalDuration: appointmentTotals.totalDuration,
       clientWhatsappLink: barber
         ? buildWhatsAppLink(
             baseAppointment.clientWhatsapp,
-            buildClientWhatsAppMessage({
-              ...baseAppointment,
-              barber,
-              services: appointmentServices,
-              subtotal
-            })
+            [
+              "Seu atendimento foi confirmado.",
+              `Profissional: ${barber.name}`,
+              `Data: ${new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${baseAppointment.date}T12:00:00`))}`,
+              `Horario: ${baseAppointment.startTime}`,
+              `Servicos: ${appointmentServices.map((service) => service.name).join(", ")}`,
+              `WhatsApp da barbearia: ${brandConfig.businessWhatsapp}`
+            ].join("\n")
           )
         : "#",
       barberWhatsappLink: barber
         ? buildWhatsAppLink(
             barber.phone,
-            buildBarberWhatsAppMessage({
-              ...baseAppointment,
-              barber,
-              services: appointmentServices
-            })
+            [
+              "Atualizacao da agenda.",
+              `Cliente: ${baseAppointment.clientName}`,
+              `Data: ${baseAppointment.date}`,
+              `Horario: ${baseAppointment.startTime} ate ${baseAppointment.endTime}`,
+              `Servicos: ${appointmentServices.map((service) => service.name).join(", ")}`,
+              `Observacoes: ${baseAppointment.notes || "Sem observacoes"}`
+            ].join("\n")
           )
         : "#"
     };
   }
 
-  function buildClientWhatsAppMessage(appointment) {
-    const serviceList = appointment.services.map((service) => service.name).join(", ");
-    return [
-      "Seu agendamento foi confirmado.",
-      `Codigo: ${appointment.id}`,
-      `Profissional: ${appointment.barber.name}`,
-      `Data: ${formatLongDate(appointment.date)}`,
-      `Horario: ${appointment.startTime}`,
-      `Servicos: ${serviceList}`,
-      `Valor: ${formatCurrency(appointment.subtotal)}`
-    ].join("\n");
-  }
-
-  function buildBarberWhatsAppMessage(appointment) {
-    const serviceList = appointment.services.map((service) => service.name).join(", ");
-    return [
-      "Novo agendamento recebido.",
-      `Codigo: ${appointment.id}`,
-      `Cliente: ${appointment.clientName}`,
-      `WhatsApp: ${appointment.clientWhatsapp}`,
-      `Data: ${formatLongDate(appointment.date)}`,
-      `Horario: ${appointment.startTime} ate ${appointment.endTime}`,
-      `Servicos: ${serviceList}`,
-      `Observacoes: ${appointment.notes || "Sem observacoes"}`
-    ].join("\n");
-  }
-
-  function toggleService(serviceId, target = "booking") {
-    if (target === "editor") {
-      setEditorForm((current) => {
-        if (!current) {
-          return current;
-        }
-
-        const nextIds = current.serviceIds.includes(serviceId)
-          ? current.serviceIds.filter((id) => id !== serviceId)
-          : [...current.serviceIds, serviceId];
-
-        return {
-          ...current,
-          serviceIds: nextIds,
-          startTime: ""
-        };
-      });
-      return;
-    }
-
-    setSelectedTime("");
-    setSelectedServiceIds((current) =>
-      current.includes(serviceId)
-        ? current.filter((id) => id !== serviceId)
-        : [...current, serviceId]
-    );
-  }
-
   function resetBookingForm() {
-    setSelectedServiceIds(activeServices[0] ? [activeServices[0].id] : []);
-    setSelectedBarberId(barbers[0]?.id ?? "");
+    setSelectedServiceIds(bookingServices[0] ? [bookingServices[0].id] : []);
     setSelectedDate(dateOptions[0]);
     setSelectedTime("");
     setClientName("");
@@ -489,6 +564,10 @@ function App() {
   }
 
   function validateBookingForm() {
+    if (!selectedBarber) {
+      return "Selecione um profissional.";
+    }
+
     if (!selectedServices.length) {
       return "Escolha pelo menos um servico.";
     }
@@ -510,45 +589,42 @@ function App() {
 
   async function handleConfirmBooking() {
     const error = validateBookingForm();
-    if (error || !selectedBarber) {
-      window.alert(error || "Selecione um profissional.");
+    if (error) {
+      window.alert(error);
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const barberAppointments = (appointmentsByBarber[selectedBarber.id] ?? []).filter(
-        (appointment) => appointment.date === selectedDate
-      );
-      const bookingCode = buildBookingCode(
-        selectedBarber.shortCode,
-        selectedDate,
-        barberAppointments.length
-      );
-      const endTime = buildAppointmentEnd(selectedTime, totals.totalDuration);
-
       const appointmentDraft = {
-        id: bookingCode,
         barberId: selectedBarber.id,
         clientName: clientName.trim(),
         clientWhatsapp: clientWhatsapp.trim(),
         serviceIds: selectedServiceIds,
         date: selectedDate,
         startTime: selectedTime,
-        endTime,
+        endTime: buildAppointmentEnd(selectedTime, totals.totalDuration),
         status: "confirmed",
         totalPrice: totals.subtotal,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         notes: notes.trim()
       };
 
       const persisted = await createAppointment(appointmentDraft);
-      setAppointments((current) => [...current, persisted.data]);
-      setConfirmation(hydrateAppointmentView(persisted.data));
+      await logAppEvent({
+        eventType: "booking.created",
+        message: `Reserva ${persisted.id} criada para ${appointmentDraft.clientName}`,
+        context: { appointmentId: persisted.id, barberId: appointmentDraft.barberId }
+      });
+      await refreshData(session);
+      setConfirmation(hydrateAppointmentView({ ...appointmentDraft, id: persisted.id }));
       setLoadError("");
     } catch (saveError) {
+      await logAppEvent({
+        level: "error",
+        eventType: "booking.failed",
+        message: saveError.message || "Falha ao salvar agendamento"
+      });
       window.alert(saveError.message || "Nao foi possivel salvar o agendamento.");
     } finally {
       setIsSaving(false);
@@ -559,20 +635,11 @@ function App() {
     setStatusUpdateId(appointmentId);
 
     try {
-      const updated = await updateAppointmentStatus(appointmentId, nextStatus);
-      setAppointments((current) =>
-        current.map((appointment) =>
-          appointment.id === appointmentId ? { ...appointment, ...updated.data } : appointment
-        )
-      );
-
+      await updateAppointmentStatus(appointmentId, nextStatus);
+      await refreshData(session);
       setEditorForm((current) =>
-        current && current.id === appointmentId
-          ? { ...current, status: nextStatus }
-          : current
+        current && current.id === appointmentId ? { ...current, status: nextStatus } : current
       );
-    } catch (error) {
-      window.alert(error.message || "Nao foi possivel atualizar o status.");
     } finally {
       setStatusUpdateId("");
     }
@@ -585,9 +652,13 @@ function App() {
 
     try {
       const nextSession = await authenticateStaff(loginForm.email, loginForm.password);
-      setSession(nextSession);
       setLoginForm(loginInitialState);
       setActiveView(nextSession.role === "admin" ? "admin" : "panel");
+      await logAppEvent({
+        eventType: "auth.login",
+        message: `${nextSession.email} autenticado com sucesso`
+      });
+      await refreshData(nextSession);
     } catch (error) {
       setAuthError(error.message || "Nao foi possivel autenticar.");
     } finally {
@@ -595,11 +666,59 @@ function App() {
     }
   }
 
-  function handleLogout() {
-    clearStoredSession();
-    setSession(null);
-    setActiveView("booking");
+  async function handleRequestPasswordReset(event) {
+    event.preventDefault();
+
+    if (!recoveryEmail.trim()) {
+      setPasswordResetFeedback("Informe o email para recuperar a senha.");
+      return;
+    }
+
+    setIsRequestingPasswordReset(true);
+    setPasswordResetFeedback("");
+
+    try {
+      await requestPasswordReset(recoveryEmail);
+      setPasswordResetFeedback("Link de recuperacao enviado para o email informado.");
+    } catch (error) {
+      setPasswordResetFeedback(error.message || "Nao foi possivel enviar a recuperacao.");
+    } finally {
+      setIsRequestingPasswordReset(false);
+    }
+  }
+
+  async function handleFinishRecovery(event) {
+    event.preventDefault();
+
+    if (recoveryPassword.trim().length < 6) {
+      setPasswordResetFeedback("A nova senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setIsFinishingRecovery(true);
+    setPasswordResetFeedback("");
+
+    try {
+      await updateOwnPassword(recoveryPassword.trim());
+      setPasswordResetFeedback("Senha atualizada. Voce ja pode entrar normalmente.");
+      setRecoveryPassword("");
+      setIsRecoveryMode(false);
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } catch (error) {
+      setPasswordResetFeedback(error.message || "Nao foi possivel redefinir a senha.");
+    } finally {
+      setIsFinishingRecovery(false);
+    }
+  }
+
+  async function handleLogout() {
+    await clearStoredSession();
     setEditorForm(null);
+    setServiceEditorForm(null);
+    setStaffForm(emptyStaffForm);
+    await refreshData(null);
   }
 
   async function handleCreateBlock(event) {
@@ -616,14 +735,14 @@ function App() {
     }
 
     try {
-      const created = await createScheduleBlock(blockForm, session);
-      setScheduleBlocks((current) => [...current, created.data]);
+      await createScheduleBlock(blockForm, session);
       setBlockForm({
         ...blockInitialState,
         barberId: blockForm.barberId || barbers[0]?.id || "",
         date: blockForm.date
       });
       setBlockFeedback("Bloqueio salvo com sucesso.");
+      await refreshData(session);
     } catch (error) {
       setBlockFeedback(error.message || "Nao foi possivel salvar o bloqueio.");
     }
@@ -634,9 +753,7 @@ function App() {
 
     try {
       await deleteScheduleBlock(blockId);
-      setScheduleBlocks((current) => current.filter((block) => block.id !== blockId));
-    } catch (error) {
-      window.alert(error.message || "Nao foi possivel remover o bloqueio.");
+      await refreshData(session);
     } finally {
       setBlockActionId("");
     }
@@ -649,9 +766,10 @@ function App() {
     });
   }
 
-  function createEmptyServiceDraft() {
+  function createEmptyServiceDraft(barberId = managedBarberId) {
     return {
       id: "",
+      barberId,
       name: "",
       badge: "",
       price: "",
@@ -659,37 +777,24 @@ function App() {
       category: "",
       description: "",
       isActive: true,
-      sortOrder: services.length + 1
+      sortOrder: managedServices.length + 1
     };
-  }
-
-  function beginCreateService() {
-    setServiceEditorForm(createEmptyServiceDraft());
-    setServiceFeedback("");
   }
 
   function beginEditService(service) {
     setServiceEditorForm({
       id: service.id,
+      barberId: service.barberId,
       name: service.name,
       badge: service.badge,
       price: String(service.price),
       duration: String(service.duration),
       category: service.category,
       description: service.description,
-      isActive: true,
-      sortOrder: services.findIndex((item) => item.id === service.id) + 1
+      isActive: service.isActive,
+      sortOrder: service.sortOrder
     });
     setServiceFeedback("");
-  }
-
-  function cancelServiceEdit() {
-    setServiceEditorForm(null);
-    setServiceFeedback("");
-  }
-
-  function cancelEditAppointment() {
-    setEditorForm(null);
   }
 
   async function handleSaveAppointmentEdits() {
@@ -701,21 +806,9 @@ function App() {
     setIsUpdatingAppointment(true);
 
     try {
-      const updatedAppointment = {
-        ...editorForm,
-        endTime: buildAppointmentEnd(editorForm.startTime, editorTotals.totalDuration),
-        totalPrice: editorTotals.subtotal
-      };
-
-      const updated = await updateAppointment(editorForm.id, updatedAppointment);
-      setAppointments((current) =>
-        current.map((appointment) =>
-          appointment.id === updated.data.id ? updated.data : appointment
-        )
-      );
-      setEditorForm(updated.data);
-    } catch (error) {
-      window.alert(error.message || "Nao foi possivel salvar as alteracoes.");
+      await saveStaffAppointment(editorForm);
+      await refreshData(session);
+      setEditorForm(null);
     } finally {
       setIsUpdatingAppointment(false);
     }
@@ -737,18 +830,11 @@ function App() {
     setIsSavingService(true);
 
     try {
-      const existingService = services.find((service) => service.id === serviceEditorForm.id) ?? null;
-      const saved = await saveService(serviceEditorForm, existingService);
-      setServices((current) => {
-        const hasExisting = current.some((service) => service.id === saved.data.id);
-        const next = hasExisting
-          ? current.map((service) => (service.id === saved.data.id ? saved.data : service))
-          : [...current, saved.data];
-
-        return next.slice().sort((left, right) => left.name.localeCompare(right.name));
-      });
+      const existingService = managedServices.find((service) => service.id === serviceEditorForm.id) ?? null;
+      await saveService({ ...serviceEditorForm, barberId: managedBarberId }, existingService);
       setServiceFeedback("Servico salvo com sucesso.");
-      beginEditService(saved.data);
+      await refreshData(session);
+      setServiceEditorForm(createEmptyServiceDraft(managedBarberId));
     } catch (error) {
       setServiceFeedback(error.message || "Nao foi possivel salvar o servico.");
     } finally {
@@ -761,19 +847,190 @@ function App() {
     setServiceFeedback("");
 
     try {
-      const saved = await setServiceActive(service.id, !service.isActive);
-      setServices((current) =>
-        current.map((item) => (item.id === service.id ? saved.data : item))
-      );
-      if (selectedServiceIds.includes(service.id) && !saved.data.isActive) {
-        setSelectedServiceIds((current) => current.filter((id) => id !== service.id));
-      }
-      setServiceFeedback(saved.data.isActive ? "Servico reativado." : "Servico excluido do catalogo.");
-      beginEditService(saved.data);
-    } catch (error) {
-      setServiceFeedback(error.message || "Nao foi possivel atualizar o servico.");
+      await setServiceActive(service.id, !service.isActive);
+      setServiceFeedback(service.isActive ? "Servico retirado do catalogo." : "Servico reativado.");
+      await refreshData(session);
+      beginEditService({ ...service, isActive: !service.isActive });
     } finally {
       setServiceActionId("");
+    }
+  }
+
+  async function handleSaveCustomerNotes(customer) {
+    setCustomerActionId(customer.id);
+
+    try {
+      const saved = await updateCustomerNotes(customer.id, customerDrafts[customer.id] ?? customer.notes);
+      setCustomers((current) => current.map((item) => (item.id === customer.id ? saved.data : item)));
+    } finally {
+      setCustomerActionId("");
+    }
+  }
+
+  async function handleSaveStaff(event) {
+    event.preventDefault();
+
+    if (!staffForm.fullName.trim() || !staffForm.email.trim()) {
+      setStaffFeedback("Preencha nome e email.");
+      return;
+    }
+
+    setIsSavingStaff(true);
+    setStaffFeedback("");
+
+    try {
+      await saveStaffMember(staffForm);
+      setStaffForm(emptyStaffForm);
+      setStaffFeedback("Equipe atualizada.");
+      await refreshData(session);
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel salvar a equipe.");
+    } finally {
+      setIsSavingStaff(false);
+    }
+  }
+
+  function handleEditStaffMember(staff) {
+    setStaffForm({
+      id: staff.id,
+      fullName: staff.fullName,
+      email: staff.email,
+      role: staff.role,
+      barberId: staff.barberId ?? "",
+      password: "",
+      isActive: staff.isActive
+    });
+    setStaffFeedback("");
+  }
+
+  async function handleResetStaffPassword(staff) {
+    const nextPassword = window.prompt(`Nova senha para ${staff.fullName}:`);
+    if (!nextPassword) {
+      return;
+    }
+
+    setStaffActionId(staff.id);
+
+    try {
+      await resetStaffPassword(staff.id, nextPassword);
+      setStaffFeedback(`Senha redefinida para ${staff.fullName}.`);
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel redefinir a senha.");
+    } finally {
+      setStaffActionId("");
+    }
+  }
+
+  async function handleToggleStaffActive(staff) {
+    setStaffActionId(staff.id);
+
+    try {
+      await toggleStaffMemberActive(staff.id, !staff.isActive);
+      await refreshData(session);
+    } finally {
+      setStaffActionId("");
+    }
+  }
+
+  async function handleProcessQueue() {
+    setIsProcessingQueue(true);
+    setQueueFeedback("");
+
+    try {
+      const result = await processNotificationQueue(20);
+      setQueueFeedback(
+        result.data?.error
+          ? result.data.error
+          : `Fila processada. ${result.data?.processed ?? 0} notificacoes enviadas/tentadas.`
+      );
+      await refreshData(session);
+    } catch (error) {
+      setQueueFeedback(error.message || "Nao foi possivel processar a fila.");
+    } finally {
+      setIsProcessingQueue(false);
+    }
+  }
+
+  async function handleSaveBrandSettings(event) {
+    event.preventDefault();
+    setIsSavingBrand(true);
+
+    try {
+      const saved = await saveBrandSettings(brandEditor);
+      setBrandConfig(saved.data);
+      setBrandEditor(saved.data);
+      setStaffFeedback("Marca atualizada.");
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel salvar a marca.");
+    } finally {
+      setIsSavingBrand(false);
+    }
+  }
+
+  async function handleUploadBrandLogo(file) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const uploaded = await uploadMediaAsset(file, "branding");
+      setBrandEditor((current) => ({
+        ...current,
+        logoImagePath: uploaded.data.path,
+        logoImageUrl: uploaded.data.publicUrl
+      }));
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel enviar a logo.");
+    }
+  }
+
+  async function handleSaveGalleryPost(event) {
+    event.preventDefault();
+
+    if (!galleryEditorForm.title.trim()) {
+      setStaffFeedback("Informe o titulo do post.");
+      return;
+    }
+
+    setIsSavingGalleryPost(true);
+
+    try {
+      const saved = await saveGalleryPost(galleryEditorForm);
+      setGalleryEditorForm(saved.data);
+      await refreshData(session);
+      setStaffFeedback("Post da galeria salvo.");
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel salvar o post.");
+    } finally {
+      setIsSavingGalleryPost(false);
+    }
+  }
+
+  async function handleToggleGalleryPostActive(post) {
+    setGalleryActionId(post.id);
+
+    try {
+      await setGalleryPostActive(post.id, !post.isActive);
+      await refreshData(session);
+    } finally {
+      setGalleryActionId("");
+    }
+  }
+
+  async function handleUploadGalleryImage(file) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const uploaded = await uploadMediaAsset(file, "gallery");
+      setGalleryEditorForm((current) => ({
+        ...current,
+        imagePath: uploaded.data.path,
+        imageUrl: uploaded.data.publicUrl
+      }));
+    } catch (error) {
+      setStaffFeedback(error.message || "Nao foi possivel enviar a imagem.");
     }
   }
 
@@ -782,7 +1039,7 @@ function App() {
       <div className="app-shell">
         <div className="glass-card loading-card">
           <h2>Preparando a operacao</h2>
-          <p>{loadError || "Carregando agenda, equipe, servicos e indicadores."}</p>
+          <p>{loadError || "Carregando agenda, equipe, catalogos e automacoes."}</p>
         </div>
       </div>
     );
@@ -790,897 +1047,309 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="hero-card">
-        <div className="hero-copy">
-          <span className="eyebrow">Operacao conectada</span>
-          <h1>O Pai ta on</h1>
-          <p>
-            Agenda digital com controle de equipe, bloqueios operacionais, remarcacao
-            e leitura de performance em tempo real.
-          </p>
-          <div className="hero-pills">
-            <span>Reservas online</span>
-            <span>Painel da equipe</span>
-            <span>Gestao de agenda</span>
-            <span>Financeiro</span>
-            <span>WhatsApp</span>
-          </div>
-        </div>
-        <div className="hero-stats">
-          <div className="stat-card">
-            <strong>{adminStats.today}</strong>
-            <span>atendimentos hoje</span>
-          </div>
-          <div className="stat-card">
-            <strong>{formatCurrency(adminStats.todayRevenue)}</strong>
-            <span>faturamento do dia</span>
-          </div>
-          <div className="stat-card">
-            <strong>{occupancyStats.rate.toFixed(0)}%</strong>
-            <span>ocupacao da agenda hoje</span>
-          </div>
-          <div className="stat-card auth-card">
-            <span className="mini-badge">{roleLabels[session?.role ?? "client"]}</span>
-            {session ? (
-              <>
-                <strong>{session.fullName}</strong>
-                <span>{session.email}</span>
-                <button className="secondary-button compact-button" onClick={handleLogout}>
-                  Sair
-                </button>
-              </>
-            ) : (
-              <form className="auth-form" onSubmit={handleLogin}>
-                <input
-                  type="email"
-                  placeholder="Email da equipe"
-                  value={loginForm.email}
-                  onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
-                />
-                <input
-                  type="password"
-                  placeholder="Senha"
-                  value={loginForm.password}
-                  onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
-                />
-                <button className="primary-button compact-button" type="submit" disabled={isAuthenticating}>
-                  {isAuthenticating ? "Entrando..." : "Entrar"}
-                </button>
-                {authError ? <small>{authError}</small> : null}
-              </form>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        selectedBarber={selectedBarber}
+        session={session}
+        loginForm={loginForm}
+        onLoginFormChange={(field, value) => setLoginForm((current) => ({ ...current, [field]: value }))}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        authError={authError}
+        isAuthenticating={isAuthenticating}
+        recoveryEmail={recoveryEmail}
+        onRecoveryEmailChange={setRecoveryEmail}
+        onRequestPasswordReset={handleRequestPasswordReset}
+        isRequestingPasswordReset={isRequestingPasswordReset}
+        passwordResetFeedback={passwordResetFeedback}
+        isRecoveryMode={isRecoveryMode}
+        recoveryPassword={recoveryPassword}
+        onRecoveryPasswordChange={setRecoveryPassword}
+        onFinishRecovery={handleFinishRecovery}
+        isFinishingRecovery={isFinishingRecovery}
+        adminStats={adminStats}
+        queuedNotifications={queuedNotifications}
+        brandConfig={brandConfig}
+      />
 
       {loadError ? <div className="infra-banner error">{loadError}</div> : null}
 
-      <nav className="tabbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={activeView === tab.id ? "active" : ""}
-            onClick={() => setActiveView(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      <GalleryStrip galleryPosts={galleryPosts} />
+      <TabBar tabs={tabs} activeView={activeView} onChange={setActiveView} />
 
       {activeView === "booking" ? (
-        <section className="layout-grid">
-          <section className="glass-card">
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Reserva</span>
-                <h2>Monte o atendimento</h2>
-              </div>
-              <p>Escolha servicos, profissional e horario com bloqueios e folgas ja refletidos na agenda.</p>
-            </div>
-
-            <div className="service-grid">
-              {activeServices.map((service) => {
-                const active = selectedServiceIds.includes(service.id);
-                return (
-                  <button
-                    key={service.id}
-                    className={`service-card ${active ? "active" : ""}`}
-                    onClick={() => toggleService(service.id)}
-                  >
-                    <span className="tag">{service.badge}</span>
-                    <div className="service-topline">
-                      <strong>{service.name}</strong>
-                      <span>{formatCurrency(service.price)}</span>
-                    </div>
-                    <small>{service.category}</small>
-                    <p>{service.description}</p>
-                    <em>{service.duration} min</em>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Equipe</span>
-                <h2>Defina o profissional</h2>
-              </div>
-              <p>Horarios de trabalho, pausa fixa e indisponibilidades manuais ja entram no calculo.</p>
-            </div>
-
-            <div className="barber-grid">
-              {barbers.map((barber) => (
-                <button
-                  key={barber.id}
-                  className={`barber-card ${selectedBarberId === barber.id ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedBarberId(barber.id);
-                    setSelectedTime("");
-                  }}
-                >
-                  <div className="avatar">{barber.shortCode}</div>
-                  <div>
-                    <span className="tag">{barber.role}</span>
-                    <strong>{barber.name}</strong>
-                    <p>{barber.specialty}</p>
-                    <small>
-                      Expediente {barber.workingHours.start} - {barber.workingHours.end}
-                    </small>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Disponibilidade</span>
-                <h2>Escolha data e horario</h2>
-              </div>
-              <p>Slots livres sao gerados com base no tempo de servico e nos bloqueios ativos.</p>
-            </div>
-
-            <div className="day-row">
-              {dateOptions.map((date) => (
-                <button
-                  key={date}
-                  className={`day-chip ${selectedDate === date ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedDate(date);
-                    setSelectedTime("");
-                  }}
-                >
-                  <span>{formatDateLabel(date)}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="time-grid">
-              {availableSlots.map((slot) => (
-                <button
-                  key={slot.value}
-                  className={`time-chip ${selectedTime === slot.value ? "active" : ""}`}
-                  disabled={slot.disabled || isLoading}
-                  onClick={() => setSelectedTime(slot.value)}
-                >
-                  {slot.value}
-                </button>
-              ))}
-            </div>
-
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Cliente</span>
-                <h2>Confirme os dados</h2>
-              </div>
-              <p>Os dados abaixo entram no historico da agenda e nos atalhos do WhatsApp.</p>
-            </div>
-
-            <div className="form-grid">
-              <label>
-                Nome
-                <input value={clientName} onChange={(event) => setClientName(event.target.value)} />
-              </label>
-              <label>
-                WhatsApp
-                <input value={clientWhatsapp} onChange={(event) => setClientWhatsapp(event.target.value)} />
-              </label>
-              <label className="full">
-                Observacoes
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
-              </label>
-            </div>
-
-            <div className="actions-row">
-              <button className="primary-button" onClick={handleConfirmBooking} disabled={isSaving || isLoading}>
-                {isSaving ? "Salvando..." : "Confirmar reserva"}
-              </button>
-              <button className="secondary-button" onClick={resetBookingForm}>
-                Limpar formulario
-              </button>
-            </div>
-          </section>
-
-          <aside className="glass-card summary-card">
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Resumo</span>
-                <h2>Visao da reserva</h2>
-              </div>
-            </div>
-
-            <dl className="summary-list">
-              <div><dt>Servicos</dt><dd>{summaryServices || "Selecione ao menos um servico"}</dd></div>
-              <div><dt>Profissional</dt><dd>{selectedBarber?.name || "-"}</dd></div>
-              <div><dt>Data</dt><dd>{formatLongDate(selectedDate)}</dd></div>
-              <div><dt>Horario</dt><dd>{selectedTime || "Selecione um horario"}</dd></div>
-              <div><dt>Duracao</dt><dd>{totals.serviceDuration} min</dd></div>
-              <div><dt>Preparacao</dt><dd>{totals.buffer} min</dd></div>
-              <div><dt>Tempo reservado</dt><dd>{totals.totalDuration} min</dd></div>
-              <div><dt>Total</dt><dd>{formatCurrency(totals.subtotal)}</dd></div>
-            </dl>
-
-            {confirmation ? (
-              <div className="confirmation-box">
-                <div className="confirmation-top">
-                  <span className="mini-badge">Confirmado</span>
-                  <strong>{confirmation.id}</strong>
-                </div>
-                <p>
-                  {confirmation.clientName}, seu horario com {confirmation.barber?.name} foi reservado para{" "}
-                  {formatLongDate(confirmation.date)} as {confirmation.startTime}.
-                </p>
-                <div className="actions-stack">
-                  <a className="primary-button" href={confirmation.clientWhatsappLink} target="_blank" rel="noreferrer">
-                    Confirmar com cliente
-                  </a>
-                  <a className="secondary-button" href={confirmation.barberWhatsappLink} target="_blank" rel="noreferrer">
-                    Avisar barbeiro
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div className="notice-box">
-                {isLoading
-                  ? "Carregando agenda..."
-                  : "Revise os dados e confirme a reserva para registrar na agenda."}
-              </div>
-            )}
-          </aside>
-        </section>
+        <BookingView
+          barbers={barbers}
+          selectedBarberId={selectedBarberId}
+          onSelectBarber={(barberId) => {
+            setSelectedBarberId(barberId);
+            setSelectedTime("");
+          }}
+          bookingServices={bookingServices}
+          selectedServiceIds={selectedServiceIds}
+          onToggleService={(serviceId) => {
+            setSelectedTime("");
+            setSelectedServiceIds((current) =>
+              current.includes(serviceId)
+                ? current.filter((id) => id !== serviceId)
+                : [...current, serviceId]
+            );
+          }}
+          dateOptions={dateOptions}
+          selectedDate={selectedDate}
+          onSelectDate={(date) => {
+            setSelectedDate(date);
+            setSelectedTime("");
+          }}
+          availableSlots={availableSlots}
+          selectedTime={selectedTime}
+          onSelectTime={setSelectedTime}
+          clientName={clientName}
+          onClientNameChange={setClientName}
+          clientWhatsapp={clientWhatsapp}
+          onClientWhatsappChange={setClientWhatsapp}
+          notes={notes}
+          onNotesChange={setNotes}
+          onConfirmBooking={handleConfirmBooking}
+          onResetBooking={resetBookingForm}
+          isSaving={isSaving}
+          isLoading={isLoading}
+          selectedBarber={selectedBarber}
+          summaryServices={summaryServices}
+          totals={totals}
+          confirmation={confirmation}
+        />
       ) : null}
 
       {activeView === "panel" ? (
-        <section className="layout-grid single-column">
-          <section className="glass-card">
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Equipe</span>
-                <h2>{session?.role === "barber" ? "Minha agenda" : "Agenda da equipe"}</h2>
-              </div>
-              <p>Visualize os horarios reservados, status e dados de contato para atendimento rapido.</p>
-            </div>
+        <PanelView
+          session={session}
+          barbers={barbers}
+          selectedPanelBarberId={selectedPanelBarberId}
+          onSelectPanelBarber={setSelectedPanelBarberId}
+          selectedPanelBarber={selectedPanelBarber}
+          managedServices={managedServices}
+          serviceEditorForm={serviceEditorForm}
+          onBeginEditService={beginEditService}
+          onServiceEditorChange={(field, value) =>
+            setServiceEditorForm((current) => ({
+              ...(current ?? createEmptyServiceDraft()),
+              [field]: value
+            }))
+          }
+          onSaveService={handleSaveService}
+          isSavingService={isSavingService}
+          serviceActionId={serviceActionId}
+          onToggleServiceActive={handleToggleServiceActive}
+          onBeginCreateService={() => setServiceEditorForm(createEmptyServiceDraft())}
+          serviceFeedback={serviceFeedback}
+          panelAppointments={panelAppointments}
+          hydrateAppointmentView={hydrateAppointmentView}
+          onStatusChange={handleStatusChange}
+          statusUpdateId={statusUpdateId}
+          getAppointmentServiceList={(appointment) => getAppointmentServiceList(appointment, services)}
+        />
+      ) : null}
 
-            {session?.role === "admin" ? (
-              <div className="panel-toolbar">
-                <div className="pill-switch">
-                  {barbers.map((barber) => (
-                    <button
-                      key={barber.id}
-                      className={selectedPanelBarberId === barber.id ? "active" : ""}
-                      onClick={() => setSelectedPanelBarberId(barber.id)}
-                    >
-                      {barber.name}
-                    </button>
-                  ))}
-                </div>
-                {selectedPanelBarber ? (
-                  <div className="panel-meta">
-                    <strong>{selectedPanelBarber.name}</strong>
-                    <span>{selectedPanelBarber.bio}</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {session ? (
-              <div className="service-manager">
-                <div className="section-head compact">
-                  <div>
-                    <span className="mini-badge">Catalogo</span>
-                    <h2>Servicos e valores</h2>
-                  </div>
-                  <p>Barbeiros autenticados podem ajustar preco, descricao, duracao e cadastrar novos itens.</p>
-                </div>
-
-                <div className="service-manager-layout">
-                  <div className="service-list">
-                    {services.map((service) => (
-                      <button
-                        key={service.id}
-                        className={`service-card ${serviceEditorForm?.id === service.id ? "active" : ""} ${service.isActive ? "" : "inactive"}`}
-                        onClick={() => beginEditService(service)}
-                      >
-                        <span className="tag">{service.isActive ? service.badge : "Inativo"}</span>
-                        <div className="service-topline">
-                          <strong>{service.name}</strong>
-                          <span>{formatCurrency(service.price)}</span>
-                        </div>
-                        <small>{service.category}</small>
-                        <p>{service.description}</p>
-                        <em>{service.duration} min</em>
-                      </button>
-                    ))}
-                  </div>
-
-                  <form className="subsection-card service-editor" onSubmit={handleSaveService}>
-                    <div className="section-head compact">
-                      <div>
-                        <span className="mini-badge">Editor</span>
-                        <h2>{serviceEditorForm?.id ? "Atualizar servico" : "Novo servico"}</h2>
-                      </div>
-                    </div>
-
-                    <div className="form-grid">
-                      <label>
-                        Nome
-                        <input
-                          value={serviceEditorForm?.name ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), name: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Badge
-                        <input
-                          value={serviceEditorForm?.badge ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), badge: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Preco
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={serviceEditorForm?.price ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), price: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Duracao
-                        <input
-                          type="number"
-                          min="5"
-                          step="5"
-                          value={serviceEditorForm?.duration ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), duration: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Categoria
-                        <input
-                          value={serviceEditorForm?.category ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), category: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Ordem
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={serviceEditorForm?.sortOrder ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), sortOrder: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="full">
-                        Descricao
-                        <textarea
-                          value={serviceEditorForm?.description ?? ""}
-                          onChange={(event) =>
-                            setServiceEditorForm((current) => ({ ...(current ?? createEmptyServiceDraft()), description: event.target.value }))
-                          }
-                        />
-                      </label>
-                    </div>
-
-                    <div className="actions-row">
-                      <button className="primary-button" type="submit" disabled={isSavingService}>
-                        {isSavingService ? "Salvando..." : "Salvar servico"}
-                      </button>
-                      {serviceEditorForm?.id ? (
-                        <button
-                          className="secondary-button danger-button"
-                          type="button"
-                          onClick={() =>
-                            handleToggleServiceActive(
-                              services.find((service) => service.id === serviceEditorForm.id) ?? serviceEditorForm
-                            )
-                          }
-                          disabled={serviceActionId === serviceEditorForm.id}
-                        >
-                          {serviceActionId === serviceEditorForm.id
-                            ? "Atualizando..."
-                            : services.find((service) => service.id === serviceEditorForm.id)?.isActive
-                              ? "Excluir servico"
-                              : "Restaurar servico"}
-                        </button>
-                      ) : null}
-                      <button className="secondary-button" type="button" onClick={beginCreateService}>
-                        Novo servico
-                      </button>
-                      <button className="secondary-button" type="button" onClick={cancelServiceEdit}>
-                        Fechar
-                      </button>
-                    </div>
-                    {serviceFeedback ? <p className="feedback-line">{serviceFeedback}</p> : null}
-                  </form>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="agenda-list">
-              {panelAppointments.map((appointment) => {
-                const bookedServices = services.filter((service) =>
-                  appointment.serviceIds.includes(service.id)
-                );
-
-                return (
-                  <article key={appointment.id} className="agenda-card">
-                    <div>
-                      <span className="tag">{appointment.id}</span>
-                      <h3>{appointment.clientName}</h3>
-                      <p>{bookedServices.map((service) => service.name).join(", ")}</p>
-                      <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
-                    </div>
-                    <div className="agenda-meta">
-                      <strong>{formatLongDate(appointment.date)}</strong>
-                      <span>{appointment.startTime} ate {appointment.endTime}</span>
-                      <small>{appointment.clientWhatsapp}</small>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </section>
+      {activeView === "automations" ? (
+        <AutomationsView
+          visibleNotifications={visibleNotifications}
+          brandConfig={brandConfig}
+          onProcessQueue={handleProcessQueue}
+          isProcessingQueue={isProcessingQueue}
+          queueFeedback={queueFeedback}
+        />
       ) : null}
 
       {activeView === "whatsapp" ? (
-        <section className="layout-grid single-column">
-          <section className="glass-card">
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Relacionamento</span>
-                <h2>Central de WhatsApp</h2>
-              </div>
-              <p>Atalhos prontos para contato com clientes e equipe a partir das reservas do sistema.</p>
-            </div>
-
-            <div className="whatsapp-grid">
-              {visibleWhatsappAppointments.slice().reverse().map((appointment) => {
-                const hydrated = hydrateAppointmentView(appointment);
-
-                return (
-                  <article key={appointment.id} className="whatsapp-card">
-                    <div>
-                      <span className="tag">{appointment.id}</span>
-                      <h3>{appointment.clientName}</h3>
-                      <p>{hydrated.barber?.name || "Sem profissional"}</p>
-                      <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
-                    </div>
-                    <div className="actions-stack">
-                      <a className="primary-button" href={hydrated.clientWhatsappLink} target="_blank" rel="noreferrer">
-                        Falar com cliente
-                      </a>
-                      <a className="secondary-button" href={hydrated.barberWhatsappLink} target="_blank" rel="noreferrer">
-                        Falar com barbeiro
-                      </a>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </section>
+        <WhatsappView
+          visibleWhatsappAppointments={visibleWhatsappAppointments}
+          hydrateAppointmentView={hydrateAppointmentView}
+        />
       ) : null}
 
       {activeView === "admin" ? (
-        <section className="layout-grid single-column">
-          <section className="glass-card">
-            <div className="section-head">
-              <div>
-                <span className="mini-badge">Gestao</span>
-                <h2>Controle da operacao</h2>
-              </div>
-              <p>Painel completo para agenda, bloqueios, remarcacao e leitura financeira.</p>
-            </div>
+        <AdminView
+          adminStats={adminStats}
+          occupancyStats={occupancyStats}
+          customers={customers}
+          customerDrafts={customerDrafts}
+          onCustomerDraftChange={(customerId, value) =>
+            setCustomerDrafts((current) => ({ ...current, [customerId]: value }))
+          }
+          onSaveCustomerNotes={handleSaveCustomerNotes}
+          customerActionId={customerActionId}
+          blockForm={blockForm}
+          onBlockFormChange={(field, value) => setBlockForm((current) => ({ ...current, [field]: value }))}
+          onCreateBlock={handleCreateBlock}
+          blockFeedback={blockFeedback}
+          barbers={barbers}
+          scheduleBlocks={scheduleBlocks}
+          blockActionId={blockActionId}
+          onDeleteBlock={handleDeleteBlock}
+          editorForm={editorForm}
+          onEditorChange={(field, value) =>
+            setEditorForm((current) => {
+              if (!current) {
+                return current;
+              }
 
-            <div className="admin-stats">
-              <div className="metric-card">
-                <strong>{formatCurrency(adminStats.grossRevenue)}</strong>
-                <span>faturamento total</span>
-              </div>
-              <div className="metric-card">
-                <strong>{formatCurrency(adminStats.averageTicket)}</strong>
-                <span>ticket medio</span>
-              </div>
-              <div className="metric-card">
-                <strong>{occupancyStats.rate.toFixed(0)}%</strong>
-                <span>ocupacao hoje</span>
-              </div>
-              <div className="metric-card">
-                <strong>{adminStats.topBarber?.barber?.name || "-"}</strong>
-                <span>lider em receita</span>
-              </div>
-            </div>
+              if (field === "barberId") {
+                return { ...current, barberId: value, serviceIds: [], startTime: "" };
+              }
 
-            <div className="finance-strip">
-              <div className="finance-card">
-                <span>Receita do dia</span>
-                <strong>{formatCurrency(adminStats.todayRevenue)}</strong>
-              </div>
-              <div className="finance-card">
-                <span>Reservas confirmadas</span>
-                <strong>{adminStats.confirmed}</strong>
-              </div>
-              <div className="finance-card">
-                <span>Atendimentos concluidos</span>
-                <strong>{adminStats.completed}</strong>
-              </div>
-              <div className="finance-card">
-                <span>Cancelamentos</span>
-                <strong>{adminStats.cancelled}</strong>
-              </div>
-            </div>
+              if (field === "date") {
+                return { ...current, date: value, startTime: "" };
+              }
 
-            <div className="admin-columns">
-              <section className="subsection-card">
-                <div className="section-head compact">
-                  <div>
-                    <span className="mini-badge">Bloqueios</span>
-                    <h2>Agenda manual</h2>
-                  </div>
-                  <p>Cadastre folgas, almocos e indisponibilidades por data.</p>
-                </div>
+              return { ...current, [field]: value };
+            })
+          }
+          editorAvailableSlots={editorAvailableSlots}
+          editorServicesCatalog={editorServicesCatalog}
+          onToggleEditorService={(serviceId) =>
+            setEditorForm((current) => {
+              if (!current) {
+                return current;
+              }
 
-                <form className="form-grid block-form" onSubmit={handleCreateBlock}>
-                  <label>
-                    Profissional
-                    <select
-                      value={blockForm.barberId}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, barberId: event.target.value }))}
-                    >
-                      {barbers.map((barber) => (
-                        <option key={barber.id} value={barber.id}>
-                          {barber.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Data
-                    <input
-                      type="date"
-                      value={blockForm.date}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, date: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    Tipo
-                    <select
-                      value={blockForm.blockType}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, blockType: event.target.value }))}
-                    >
-                      <option value="unavailable">Indisponivel</option>
-                      <option value="lunch">Almoco</option>
-                      <option value="day_off">Folga</option>
-                    </select>
-                  </label>
-                  <label className="full">
-                    Titulo
-                    <input
-                      value={blockForm.title}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, title: event.target.value }))}
-                    />
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={blockForm.isAllDay}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, isAllDay: event.target.checked }))}
-                    />
-                    Bloqueio o dia todo
-                  </label>
-                  {!blockForm.isAllDay ? (
-                    <>
-                      <label>
-                        Inicio
-                        <input
-                          type="time"
-                          value={blockForm.startTime}
-                          onChange={(event) => setBlockForm((current) => ({ ...current, startTime: event.target.value }))}
-                        />
-                      </label>
-                      <label>
-                        Fim
-                        <input
-                          type="time"
-                          value={blockForm.endTime}
-                          onChange={(event) => setBlockForm((current) => ({ ...current, endTime: event.target.value }))}
-                        />
-                      </label>
-                    </>
-                  ) : null}
-                  <label className="full">
-                    Observacoes
-                    <textarea
-                      value={blockForm.notes}
-                      onChange={(event) => setBlockForm((current) => ({ ...current, notes: event.target.value }))}
-                    />
-                  </label>
-                  <div className="actions-row">
-                    <button className="primary-button" type="submit">
-                      Salvar bloqueio
-                    </button>
-                  </div>
-                  {blockFeedback ? <p className="feedback-line">{blockFeedback}</p> : null}
-                </form>
+              const nextIds = current.serviceIds.includes(serviceId)
+                ? current.serviceIds.filter((id) => id !== serviceId)
+                : [...current.serviceIds, serviceId];
 
-                <div className="block-list">
-                  {upcomingBlocks.map((block) => {
-                    const blockBarber = barbers.find((barber) => barber.id === block.barberId);
-                    return (
-                      <article key={block.id} className="block-card">
-                        <div>
-                          <span className="tag">{block.blockType}</span>
-                          <strong>{block.title}</strong>
-                          <p>
-                            {blockBarber?.name || "Equipe"} • {formatLongDate(block.date)}
-                          </p>
-                          <small>
-                            {block.isAllDay ? "Dia todo" : `${block.startTime} ate ${block.endTime}`}
-                          </small>
-                        </div>
-                        <button
-                          className="secondary-button compact-button"
-                          onClick={() => handleDeleteBlock(block.id)}
-                          disabled={blockActionId === block.id}
-                        >
-                          {blockActionId === block.id ? "Removendo..." : "Remover"}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="subsection-card">
-                <div className="section-head compact">
-                  <div>
-                    <span className="mini-badge">Edicao</span>
-                    <h2>Remarcar e editar</h2>
-                  </div>
-                  <p>Abra um agendamento para alterar servicos, data, horario, profissional ou status.</p>
-                </div>
-
-                {editorForm ? (
-                  <div className="editor-card">
-                    <div className="form-grid">
-                      <label>
-                        Cliente
-                        <input
-                          value={editorForm.clientName}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, clientName: event.target.value }))}
-                        />
-                      </label>
-                      <label>
-                        WhatsApp
-                        <input
-                          value={editorForm.clientWhatsapp}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, clientWhatsapp: event.target.value }))}
-                        />
-                      </label>
-                      <label>
-                        Profissional
-                        <select
-                          value={editorForm.barberId}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, barberId: event.target.value, startTime: "" }))}
-                        >
-                          {barbers.map((barber) => (
-                            <option key={barber.id} value={barber.id}>
-                              {barber.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Status
-                        <select
-                          value={editorForm.status}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, status: event.target.value }))}
-                        >
-                          <option value="confirmed">Confirmado</option>
-                          <option value="completed">Concluido</option>
-                          <option value="cancelled">Cancelado</option>
-                        </select>
-                      </label>
-                      <label>
-                        Data
-                        <input
-                          type="date"
-                          value={editorForm.date}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, date: event.target.value, startTime: "" }))}
-                        />
-                      </label>
-                      <label>
-                        Horario
-                        <select
-                          value={editorForm.startTime}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, startTime: event.target.value }))}
-                        >
-                          <option value="">Selecione</option>
-                          {editorAvailableSlots.map((slot) => (
-                            <option key={slot.value} value={slot.value} disabled={slot.disabled}>
-                              {slot.value}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="full">
-                        Servicos
-                        <div className="service-grid compact-grid">
-                          {services.map((service) => {
-                            const active = editorForm.serviceIds.includes(service.id);
-                            return (
-                              <button
-                                type="button"
-                                key={service.id}
-                                className={`service-card compact-card ${active ? "active" : ""}`}
-                                onClick={() => toggleService(service.id, "editor")}
-                              >
-                                <strong>{service.name}</strong>
-                                <small>{formatCurrency(service.price)}</small>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </label>
-                      <label className="full">
-                        Observacoes
-                        <textarea
-                          value={editorForm.notes}
-                          onChange={(event) => setEditorForm((current) => ({ ...current, notes: event.target.value }))}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="editor-summary">
-                      <span>Total recalculado: {formatCurrency(editorTotals.subtotal)}</span>
-                      <span>Tempo reservado: {editorTotals.totalDuration} min</span>
-                    </div>
-
-                    <div className="actions-row">
-                      <button className="primary-button" onClick={handleSaveAppointmentEdits} disabled={isUpdatingAppointment}>
-                        {isUpdatingAppointment ? "Salvando..." : "Salvar alteracoes"}
-                      </button>
-                      <button className="secondary-button" onClick={cancelEditAppointment}>
-                        Fechar edicao
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="notice-box">
-                    Selecione um agendamento abaixo para abrir o editor e remarcar.
-                  </div>
-                )}
-              </section>
-            </div>
-
-            <div className="admin-filters">
-              <label>
-                Profissional
-                <select value={adminBarberFilter} onChange={(event) => setAdminBarberFilter(event.target.value)}>
-                  <option value="all">Todos</option>
-                  {barbers.map((barber) => (
-                    <option key={barber.id} value={barber.id}>
-                      {barber.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Status
-                <select value={adminStatusFilter} onChange={(event) => setAdminStatusFilter(event.target.value)}>
-                  <option value="all">Todos</option>
-                  <option value="confirmed">Confirmado</option>
-                  <option value="completed">Concluido</option>
-                  <option value="cancelled">Cancelado</option>
-                </select>
-              </label>
-              <label>
-                Data
-                <select value={adminDateFilter} onChange={(event) => setAdminDateFilter(event.target.value)}>
-                  <option value="all">Todas</option>
-                  {dateOptions.map((date) => (
-                    <option key={date} value={date}>
-                      {formatDateLabel(date)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="admin-list">
-              {adminAppointments.map((appointment) => {
-                const hydrated = hydrateAppointmentView(appointment);
-
-                return (
-                  <article key={appointment.id} className="admin-card">
-                    <div className="admin-card-main">
-                      <div className="admin-card-head">
-                        <span className="tag">{appointment.id}</span>
-                        <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
-                      </div>
-                      <h3>{appointment.clientName}</h3>
-                      <p>{hydrated.services.map((service) => service.name).join(", ")}</p>
-                      <div className="admin-card-meta">
-                        <span>{hydrated.barber?.name || "-"}</span>
-                        <span>{formatLongDate(appointment.date)}</span>
-                        <span>{appointment.startTime} ate {appointment.endTime}</span>
-                        <span>{appointment.clientWhatsapp}</span>
-                        <span>{formatCurrency(appointment.totalPrice)}</span>
-                      </div>
-                    </div>
-                    <div className="admin-card-actions">
-                      <button className="secondary-button" onClick={() => beginEditAppointment(appointment)}>
-                        Editar
-                      </button>
-                      <button
-                        className="secondary-button"
-                        disabled={statusUpdateId === appointment.id || appointment.status === "confirmed"}
-                        onClick={() => handleStatusChange(appointment.id, "confirmed")}
-                      >
-                        {statusUpdateId === appointment.id ? "Atualizando..." : "Confirmar"}
-                      </button>
-                      <button
-                        className="secondary-button"
-                        disabled={statusUpdateId === appointment.id || appointment.status === "completed"}
-                        onClick={() => handleStatusChange(appointment.id, "completed")}
-                      >
-                        {statusUpdateId === appointment.id ? "Atualizando..." : "Concluir"}
-                      </button>
-                      <button
-                        className="secondary-button danger-button"
-                        disabled={statusUpdateId === appointment.id || appointment.status === "cancelled"}
-                        onClick={() => handleStatusChange(appointment.id, "cancelled")}
-                      >
-                        {statusUpdateId === appointment.id ? "Atualizando..." : "Cancelar"}
-                      </button>
-                      <a className="primary-button" href={hydrated.barberWhatsappLink} target="_blank" rel="noreferrer">
-                        Avisar barbeiro
-                      </a>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </section>
+              return { ...current, serviceIds: nextIds, startTime: "" };
+            })
+          }
+          onSaveAppointmentEdits={handleSaveAppointmentEdits}
+          isUpdatingAppointment={isUpdatingAppointment}
+          editorTotals={editorTotals}
+          staffMembers={staffMembers}
+          staffForm={staffForm}
+          onStaffFormChange={(field, value) =>
+            setStaffForm((current) => ({
+              ...current,
+              [field]: field === "role" && value === "admin" ? value : value,
+              ...(field === "role" && value === "admin" ? { barberId: "" } : {})
+            }))
+          }
+          onSaveStaff={handleSaveStaff}
+          isSavingStaff={isSavingStaff}
+          staffActionId={staffActionId}
+          onEditStaffMember={handleEditStaffMember}
+          onToggleStaffActive={handleToggleStaffActive}
+          onResetStaffPassword={handleResetStaffPassword}
+          staffFeedback={staffFeedback}
+          brandConfig={brandEditor}
+          onBrandConfigChange={(field, value) => setBrandEditor((current) => ({ ...current, [field]: value }))}
+          onSaveBrandSettings={handleSaveBrandSettings}
+          isSavingBrand={isSavingBrand}
+          onUploadBrandLogo={handleUploadBrandLogo}
+          galleryPosts={galleryPosts}
+          galleryEditorForm={galleryEditorForm}
+          onGalleryEditorChange={(field, value) =>
+            setGalleryEditorForm((current) => ({ ...current, [field]: value }))
+          }
+          onSaveGalleryPost={handleSaveGalleryPost}
+          isSavingGalleryPost={isSavingGalleryPost}
+          galleryActionId={galleryActionId}
+          onEditGalleryPost={setGalleryEditorForm}
+          onCreateGalleryPost={() =>
+            setGalleryEditorForm({
+              ...emptyGalleryPostForm,
+              sortOrder: galleryPosts.length + 1
+            })
+          }
+          onToggleGalleryPostActive={handleToggleGalleryPostActive}
+          onUploadGalleryImage={handleUploadGalleryImage}
+          logs={logs}
+          adminBarberFilter={adminBarberFilter}
+          onAdminBarberFilterChange={setAdminBarberFilter}
+          adminStatusFilter={adminStatusFilter}
+          onAdminStatusFilterChange={setAdminStatusFilter}
+          adminDateFilter={adminDateFilter}
+          onAdminDateFilterChange={setAdminDateFilter}
+          dateOptions={dateOptions}
+          adminAppointments={adminAppointments}
+          onBeginEditAppointment={beginEditAppointment}
+          statusUpdateId={statusUpdateId}
+          onStatusChange={handleStatusChange}
+          hydrateAppointmentView={hydrateAppointmentView}
+          getAppointmentServiceList={(appointment) => getAppointmentServiceList(appointment, services)}
+        />
       ) : null}
     </div>
   );
+}
+
+function createTimeSlots({
+  barber,
+  date,
+  totalDuration,
+  appointments,
+  scheduleBlocks,
+  ignoreAppointmentId = ""
+}) {
+  const slots = [];
+  const start = timeToMinutes(barber.workingHours.start);
+  const end = timeToMinutes(barber.workingHours.end);
+
+  for (let cursor = start; cursor <= end - totalDuration; cursor += 10) {
+    const hours = String(Math.floor(cursor / 60)).padStart(2, "0");
+    const minutes = String(cursor % 60).padStart(2, "0");
+    const value = `${hours}:${minutes}`;
+    const nextEnd = cursor + totalDuration;
+    const blocked = isBlocked({
+      barber,
+      date,
+      start: cursor,
+      end: nextEnd,
+      appointments,
+      scheduleBlocks,
+      ignoreAppointmentId
+    });
+
+    slots.push({ value, disabled: blocked });
+  }
+
+  return slots;
+}
+
+function isBlocked({ barber, date, start, end, appointments, scheduleBlocks, ignoreAppointmentId }) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  if (barber.daysOff.includes(day)) {
+    return true;
+  }
+
+  const workingStart = timeToMinutes(barber.workingHours.start);
+  const workingEnd = timeToMinutes(barber.workingHours.end);
+  if (start < workingStart || end > workingEnd) {
+    return true;
+  }
+
+  if (
+    barber.breakRanges.some(
+      (range) => start < timeToMinutes(range.end) && end > timeToMinutes(range.start)
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    scheduleBlocks
+      .filter((block) => block.date === date && block.barberId === barber.id)
+      .some((block) => block.isAllDay || (start < timeToMinutes(block.endTime) && end > timeToMinutes(block.startTime)))
+  ) {
+    return true;
+  }
+
+  return appointments
+    .filter(
+      (appointment) =>
+        appointment.id !== ignoreAppointmentId &&
+        appointment.barberId === barber.id &&
+        appointment.date === date &&
+        appointment.status !== "cancelled"
+    )
+    .some((appointment) => start < timeToMinutes(appointment.endTime) && end > timeToMinutes(appointment.startTime));
 }
 
 export default App;

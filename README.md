@@ -1,12 +1,15 @@
 # O Pai ta on
 
-App React com:
+App React para barbearia com:
 
-- fluxo do cliente
-- painel do barbeiro
-- links operacionais de WhatsApp
-- regra de bloqueio para impedir dois clientes no mesmo horario do mesmo barbeiro
-- slots de 10 minutos com buffer de 10 a 15 minutos
+- reserva publica por barbeiro
+- login de equipe com Supabase Auth
+- RLS real por perfil
+- catalogo individual por profissional
+- CRM de clientes
+- fila de notificacoes pronta para WhatsApp oficial
+- gestao de equipe e acesso
+- galeria visual para cortes e marca
 
 ## Rodar
 
@@ -24,25 +27,55 @@ npm run preview -- --port 4174
 
 ## Estrutura
 
-- `src/App.jsx`: fluxo principal do produto
-- `src/data.js`: barbeiros, servicos e dados iniciais
-- `src/utils/schedule.js`: regras de agenda, bloqueio, buffers e slots
-- `src/lib/supabase.js`: ponto inicial para migrar o estado local para Supabase
-- `vercel.json`: fallback SPA para deploy no Vercel
+- `src/App.jsx`: orquestracao principal do app
+- `src/components/`: secoes modulares da interface
+- `src/data.js`: fallback local e brand assets
+- `src/lib/api.js`: camada de dados e chamadas para Supabase/Edge Functions
+- `src/lib/supabase.js`: cliente Supabase
+- `supabase/schema.sql`: schema, RLS, seeds e fila de notificacoes
+- `supabase/functions/manage-staff-user/`: Edge Function para criar/editar equipe
+- `supabase/functions/process-whatsapp-queue/`: Edge Function para envio oficial via Meta
 
-## Supabase real
+## Supabase
 
-1. Crie um projeto no Supabase.
-2. Rode o SQL de [`supabase/schema.sql`](/home/limax44/appmobilebarbearia/supabase/schema.sql).
-3. Copie `.env.example` para `.env`.
-4. Preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
+1. Rode o SQL de [supabase/schema.sql](/home/limax44/appmobilebarbearia/supabase/schema.sql).
+2. Copie `.env.example` para `.env`.
+3. Preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
+4. Defina `VITE_PASSWORD_RESET_URL` com a URL publica do app.
 5. Rode `npm run dev`.
 
-Sem essas credenciais, o app entra em fallback local para nao quebrar a demo.
+## WhatsApp oficial
 
-## Proximos passos reais
+O app usa o numero comercial `5592986202729` como referencia visual e de fila.
 
-1. Substituir `sampleAppointments` por leitura/escrita no Supabase.
-2. Trocar links `wa.me` por WhatsApp Business API ou provedor oficial.
-3. Adicionar autenticacao do barbeiro.
-4. Criar dashboard financeiro e recorrencia para planos premium.
+Para envio real pela Meta Cloud API, configure nas Edge Functions:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `WHATSAPP_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `WHATSAPP_BUSINESS_NUMBER=5592986202729`
+
+Sem `WHATSAPP_TOKEN` e `WHATSAPP_PHONE_NUMBER_ID`, a fila existe, mas o disparo oficial nao acontece.
+
+## Midia editavel
+
+O app agora usa:
+
+- tabela `public.app_brand_settings`
+- tabela `public.gallery_posts`
+- bucket `storage.opaitaon-media`
+
+Admins podem trocar logo e posts pelo painel, sem editar codigo.
+
+## Observacao operacional
+
+O schema ja foi aplicado no banco remoto usado neste projeto, incluindo:
+
+- usuarios iniciais da equipe
+- perfis de acesso
+- catalogos por barbeiro
+- CRM inicial
+- logs de aplicacao
+- notificacoes automatizadas
