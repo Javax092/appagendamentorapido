@@ -2,6 +2,8 @@ import editorialPortrait from "../assets/portrait-editorial.svg";
 import heritagePortrait from "../assets/portrait-heritage.svg";
 import { formatCurrency, formatDateLabel, formatLongDate } from "../utils/schedule";
 
+const showcaseImage = "/paion2.png";
+
 const portraitMap = {
   heritage: heritagePortrait,
   editorial: editorialPortrait
@@ -43,10 +45,7 @@ export function BookingView({
             <span className="mini-badge">Reserva</span>
             <h2>Escolha o profissional</h2>
           </div>
-          <p>
-            Cada barbeiro tem catalogo, preco e disponibilidade proprios. O cliente reserva
-            direto no contexto certo.
-          </p>
+          <p>Selecione o barbeiro e monte o atendimento em poucos passos.</p>
         </div>
 
         <div className="barber-grid">
@@ -78,7 +77,7 @@ export function BookingView({
             <span className="mini-badge">Catalogo</span>
             <h2>Monte o atendimento</h2>
           </div>
-          <p>Os servicos abaixo pertencem somente ao profissional selecionado.</p>
+          <p>Servicos e valores do profissional selecionado.</p>
         </div>
 
         <div className="service-grid">
@@ -108,7 +107,7 @@ export function BookingView({
             <span className="mini-badge">Disponibilidade</span>
             <h2>Escolha data e horario</h2>
           </div>
-          <p>Os slots livres ja consideram folgas, pausas, bloqueios e reservas existentes.</p>
+          <p>Somente horarios realmente disponiveis.</p>
         </div>
 
         <div className="day-row">
@@ -141,7 +140,7 @@ export function BookingView({
             <span className="mini-badge">Cliente</span>
             <h2>Confirme os dados</h2>
           </div>
-          <p>O cadastro alimenta historico, frequencia, ticket medio e observacoes internas no CRM.</p>
+          <p>Dados para confirmar o atendimento com rapidez.</p>
         </div>
 
         <div className="form-grid">
@@ -173,7 +172,15 @@ export function BookingView({
         <div className="section-head">
           <div>
             <span className="mini-badge">Resumo</span>
-            <h2>Visao da reserva</h2>
+            <h2>Sua reserva</h2>
+          </div>
+        </div>
+
+        <div className="summary-visual">
+          <img src={showcaseImage} alt="Corte em destaque da barbearia" />
+          <div className="summary-visual-copy">
+            <strong>{selectedBarber?.name || "Atendimento premium"}</strong>
+            <span>{selectedBarber?.specialty || "Corte, barba e acabamento com atendimento profissional."}</span>
           </div>
         </div>
 
@@ -207,7 +214,7 @@ export function BookingView({
           </div>
         ) : (
           <div className="notice-box">
-            Revise os dados e confirme a reserva. O backend cria a fila de confirmacao e lembrete automaticamente.
+            Revise os dados e finalize o agendamento.
           </div>
         )}
       </aside>

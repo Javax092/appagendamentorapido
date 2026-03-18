@@ -1,5 +1,8 @@
 import { formatCurrency, formatLongDate } from "../utils/schedule";
 
+const showcaseImage = "/paion2.png";
+const brandLogo = "/paitaon.png";
+
 export function PanelView({
   session,
   barbers,
@@ -46,8 +49,8 @@ export function PanelView({
           </div>
           <p>
             {isBarber
-              ? "Painel operacional para cadastrar servicos e acompanhar atendimentos reservados."
-              : "Visualize a agenda do profissional selecionado e ajuste o catalogo quando necessario."}
+              ? "Cadastro de servicos e acompanhamento do dia."
+              : "Agenda e servicos do profissional selecionado."}
           </p>
         </div>
 
@@ -82,8 +85,8 @@ export function PanelView({
               </div>
               <p>
                 {isBarber
-                  ? "O barbeiro edita e cadastra servicos sem expor o catalogo nesta area."
-                  : "Preco, duracao e disponibilidade continuam isolados por barbeiro."}
+                  ? "Area de cadastro e ajuste de servicos."
+                  : "Preco, duracao e ordem por profissional."}
               </p>
             </div>
 
@@ -109,12 +112,10 @@ export function PanelView({
                 </div>
               ) : (
                 <div className="subsection-card service-summary-card">
+                  <img className="service-summary-image" src={showcaseImage} alt="Corte em destaque" />
                   <span className="mini-badge">Ativos</span>
                   <strong>{managedServices.filter((service) => service.isActive).length} servicos publicados</strong>
-                  <p>
-                    O catalogo completo fica no menu principal do cliente. Aqui o barbeiro trabalha apenas no cadastro
-                    e ajuste de servicos.
-                  </p>
+                  <p>O catalogo fica no menu principal do cliente. Aqui o barbeiro cuida apenas do cadastro.</p>
                 </div>
               )}
 
@@ -226,7 +227,7 @@ export function PanelView({
           </div>
           <p>
             {agendaAppointments.length
-              ? "Consulte status, servicos e contato do cliente para atendimento rapido."
+              ? "Status, servicos e contato rapido em um so lugar."
               : "Nenhum agendamento encontrado para este contexto."}
           </p>
         </div>
@@ -262,6 +263,7 @@ export function PanelView({
                     <span className="tag">{appointment.id}</span>
                     <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
                   </div>
+                  <img className="agenda-inline-image" src={brandLogo} alt="Logo da barbearia" />
                   <h3>{appointment.clientName}</h3>
                   <p>{bookedServices.map((service) => service.name).join(", ")}</p>
                   <div className="agenda-contact">
@@ -317,8 +319,7 @@ export function PanelView({
 
         {!agendaAppointments.length ? (
           <div className="notice-box">
-            Nenhum horario reservado no momento. Quando surgirem agendamentos, eles aparecerao aqui com status e
-            contato do cliente.
+            Nenhum horario reservado no momento.
           </div>
         ) : null}
       </section>

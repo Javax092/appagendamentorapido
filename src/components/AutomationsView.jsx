@@ -1,3 +1,5 @@
+const brandLogo = "/paitaon.png";
+
 export function AutomationsView({
   visibleNotifications,
   brandConfig,
@@ -11,25 +13,23 @@ export function AutomationsView({
         <div className="section-head">
           <div>
             <span className="mini-badge">Automacoes</span>
-            <h2>Fila de confirmacoes e lembretes</h2>
+            <h2>Fila de mensagens</h2>
           </div>
-          <p>
-            O banco cria notificacoes de confirmacao, lembrete, remarcacao e cancelamento.
-            O disparo oficial usa o numero {brandConfig.businessWhatsapp}.
-          </p>
+          <p>Confirmacoes e lembretes enviados pelo numero {brandConfig.businessWhatsapp}.</p>
         </div>
 
         <div className="automation-toolbar">
           <div className="automation-badge">
+            <img className="automation-brand-image" src={brandLogo} alt="Logo da barbearia" />
             <strong>Meta Cloud API</strong>
             <span>
               {brandConfig.metaWebhookConfigured
-                ? "Configuracao de envio detectada no ambiente."
-                : "Falta definir token e phone number id da Meta para envio real."}
+                ? "Ambiente pronto para envio."
+                : "Falta configurar token e phone number id."}
             </span>
           </div>
           <button className="primary-button" onClick={onProcessQueue} disabled={isProcessingQueue}>
-            {isProcessingQueue ? "Processando..." : "Processar fila oficial"}
+            {isProcessingQueue ? "Processando..." : "Processar fila"}
           </button>
         </div>
 

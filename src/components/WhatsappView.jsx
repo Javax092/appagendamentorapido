@@ -1,3 +1,5 @@
+const brandLogo = "/paitaon.png";
+
 export function WhatsappView({ visibleWhatsappAppointments, hydrateAppointmentView }) {
   return (
     <section className="layout-grid single-column">
@@ -7,7 +9,7 @@ export function WhatsappView({ visibleWhatsappAppointments, hydrateAppointmentVi
             <span className="mini-badge">Relacionamento</span>
             <h2>Central de WhatsApp</h2>
           </div>
-          <p>Atalhos manuais continuam disponiveis para atendimento rapido e remarcacoes pontuais.</p>
+          <p>Contato rapido com cliente e equipe.</p>
         </div>
 
         <div className="whatsapp-grid">
@@ -18,6 +20,7 @@ export function WhatsappView({ visibleWhatsappAppointments, hydrateAppointmentVi
               <article key={appointment.id} className="whatsapp-card">
                 <div>
                   <span className="tag">{appointment.id}</span>
+                  <img className="whatsapp-brand-image" src={brandLogo} alt="Logo da barbearia" />
                   <h3>{appointment.clientName}</h3>
                   <p>{hydrated.barber?.name || "Sem profissional"}</p>
                   <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>

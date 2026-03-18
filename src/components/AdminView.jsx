@@ -70,9 +70,9 @@ export function AdminView({
         <div className="section-head">
           <div>
             <span className="mini-badge">Gestao</span>
-            <h2>Controle da operacao</h2>
+            <h2>Controle da barbearia</h2>
           </div>
-          <p>Painel completo para agenda, equipe, CRM, bloqueios, logs e performance.</p>
+          <p>Agenda, equipe, marca e operacao em um painel direto.</p>
         </div>
 
         <div className="admin-stats">
@@ -118,9 +118,9 @@ export function AdminView({
             <div className="section-head compact">
               <div>
                 <span className="mini-badge">Equipe</span>
-                <h2>Gestao de acesso</h2>
+                <h2>Acesso da equipe</h2>
               </div>
-              <p>Crie, edite, recupere e ative usuarios da equipe com perfil real no Supabase Auth.</p>
+              <p>Crie, ajuste e recupere acessos da equipe.</p>
             </div>
 
             <form className="form-grid" onSubmit={onSaveStaff}>
