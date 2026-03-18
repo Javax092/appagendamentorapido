@@ -150,7 +150,15 @@ export function BookingView({
           </label>
           <label>
             WhatsApp
-            <input value={clientWhatsapp} onChange={(event) => onClientWhatsappChange(event.target.value)} />
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={20}
+              placeholder="(92) 99999-9999"
+              value={clientWhatsapp}
+              onChange={(event) => onClientWhatsappChange(event.target.value)}
+            />
+            <small className="field-hint">Use DDD e numero com WhatsApp ativo.</small>
           </label>
           <label className="full">
             Observacoes
@@ -200,15 +208,25 @@ export function BookingView({
               <strong>{confirmation.id}</strong>
             </div>
             <p>
-              {confirmation.clientName}, seu horario com {confirmation.barber?.name} foi reservado para{" "}
-              {formatLongDate(confirmation.date)} as {confirmation.startTime}.
+              Reserva confirmada para {formatLongDate(confirmation.date)} as {confirmation.startTime} com{" "}
+              {confirmation.barber?.name}.
             </p>
+            <div className="confirmation-details">
+              <span>Cliente: {confirmation.clientName}</span>
+              <span>WhatsApp: {confirmation.clientWhatsapp}</span>
+            </div>
             <div className="actions-stack">
               <a className="primary-button" href={confirmation.clientWhatsappLink} target="_blank" rel="noreferrer">
-                Confirmar com cliente
+                Enviar confirmacao
               </a>
               <a className="secondary-button" href={confirmation.barberWhatsappLink} target="_blank" rel="noreferrer">
                 Avisar barbeiro
+              </a>
+              <a className="secondary-button" href={confirmation.rescheduleWhatsappLink} target="_blank" rel="noreferrer">
+                Remarcar no WhatsApp
+              </a>
+              <a className="secondary-button danger-button" href={confirmation.cancelWhatsappLink} target="_blank" rel="noreferrer">
+                Cancelar no WhatsApp
               </a>
             </div>
           </div>

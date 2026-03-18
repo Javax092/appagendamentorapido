@@ -40,6 +40,8 @@ import {
   createDateOptions,
   getServiceTotals,
   groupAppointmentsByBarber,
+  isValidWhatsapp,
+  normalizeWhatsapp,
   timeToMinutes
 } from "./utils/schedule";
 
@@ -549,7 +551,29 @@ function App() {
               `Observacoes: ${baseAppointment.notes || "Sem observacoes"}`
             ].join("\n")
           )
-        : "#"
+        : "#",
+      rescheduleWhatsappLink: buildWhatsAppLink(
+        brandConfig.businessWhatsapp,
+        [
+          "Oi, quero remarcar meu agendamento.",
+          `Codigo: ${baseAppointment.id}`,
+          `Cliente: ${baseAppointment.clientName}`,
+          `Profissional: ${barber?.name || "-"}`,
+          `Data atual: ${baseAppointment.date}`,
+          `Horario atual: ${baseAppointment.startTime}`
+        ].join("\n")
+      ),
+      cancelWhatsappLink: buildWhatsAppLink(
+        brandConfig.businessWhatsapp,
+        [
+          "Oi, quero cancelar meu agendamento.",
+          `Codigo: ${baseAppointment.id}`,
+          `Cliente: ${baseAppointment.clientName}`,
+          `Profissional: ${barber?.name || "-"}`,
+          `Data: ${baseAppointment.date}`,
+          `Horario: ${baseAppointment.startTime}`
+        ].join("\n")
+      )
     };
   }
 
@@ -581,7 +605,7 @@ function App() {
       return "Informe o nome do cliente.";
     }
 
-    if (clientWhatsapp.replace(/\D/g, "").length < 10) {
+    if (!isValidWhatsapp(clientWhatsapp)) {
       return "Informe um WhatsApp valido.";
     }
 
@@ -601,7 +625,7 @@ function App() {
       const appointmentDraft = {
         barberId: selectedBarber.id,
         clientName: clientName.trim(),
-        clientWhatsapp: clientWhatsapp.trim(),
+        clientWhatsapp: clientWhatsapp.replace(/\D/g, ""),
         serviceIds: selectedServiceIds,
         date: selectedDate,
         startTime: selectedTime,
@@ -1128,7 +1152,7 @@ function App() {
           clientName={clientName}
           onClientNameChange={setClientName}
           clientWhatsapp={clientWhatsapp}
-          onClientWhatsappChange={setClientWhatsapp}
+          onClientWhatsappChange={(value) => setClientWhatsapp(normalizeWhatsapp(value))}
           notes={notes}
           onNotesChange={setNotes}
           onConfirmBooking={handleConfirmBooking}

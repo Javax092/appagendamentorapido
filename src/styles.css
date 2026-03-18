@@ -573,6 +573,11 @@ a {
   color: var(--muted);
 }
 
+.field-hint,
+.confirmation-details span {
+  color: var(--muted);
+}
+
 .form-grid label.full {
   grid-column: 1 / -1;
 }
@@ -729,6 +734,11 @@ a {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.confirmation-details {
+  display: grid;
+  gap: 6px;
 }
 
 .agenda-list,
