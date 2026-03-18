@@ -884,6 +884,44 @@ export async function setServiceActive(serviceId, isActive, sessionProfile = nul
   };
 }
 
+export async function deleteService(serviceId, sessionProfile = null) {
+  if (!isSupabaseConfigured()) {
+    return {
+      source: "local",
+      data: serviceId
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  if (sessionProfile?.authMode === "app_users") {
+    const { data, error } = await supabase.rpc("delete_barber_service_app_user", {
+      input_email: sessionProfile.email,
+      input_password: sessionProfile.fallbackSecret,
+      input_service_id: serviceId
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      source: "supabase-app-users",
+      data
+    };
+  }
+
+  const { error } = await supabase.from(SERVICES_TABLE).delete().eq("id", serviceId);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    source: "supabase",
+    data: serviceId
+  };
+}
+
 export async function updateCustomerNotes(customerId, notes) {
   if (!isSupabaseConfigured()) {
     return {

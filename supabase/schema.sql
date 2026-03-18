@@ -1222,8 +1222,8 @@ begin
     raise exception 'Servico nao encontrado.';
   end if;
 
-  if actor.role <> 'admin' and target_service.barber_id <> actor.barber_id then
-    raise exception 'Sem permissao para alterar este servico.';
+  if actor.role <> 'admin' then
+    raise exception 'Somente admin pode alterar a exibicao do catalogo.';
   end if;
 
   update public.barber_services
@@ -1232,6 +1232,59 @@ begin
   returning * into saved_service;
 
   return saved_service;
+end;
+$$;
+
+create or replace function public.delete_barber_service_app_user(
+  input_email text,
+  input_password text,
+  input_service_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor record;
+  target_service public.barber_services%rowtype;
+  linked_appointments integer;
+begin
+  select *
+  into actor
+  from public.authenticate_staff(input_email, input_password)
+  limit 1;
+
+  if actor.user_id is null then
+    raise exception 'Credenciais invalidas.';
+  end if;
+
+  if actor.role <> 'admin' then
+    raise exception 'Somente admin pode excluir servicos.';
+  end if;
+
+  select *
+  into target_service
+  from public.barber_services
+  where id = input_service_id;
+
+  if target_service.id is null then
+    raise exception 'Servico nao encontrado.';
+  end if;
+
+  select count(*)
+  into linked_appointments
+  from public.appointment_services aps
+  where aps.service_id = input_service_id;
+
+  if linked_appointments > 0 then
+    raise exception 'Este servico ja possui historico e nao pode ser excluido.';
+  end if;
+
+  delete from public.barber_services
+  where id = input_service_id;
+
+  return input_service_id;
 end;
 $$;
 
@@ -1341,6 +1394,7 @@ grant execute on function public.update_appointment_status(text, text) to authen
 grant execute on function public.update_appointment_status_app_user(text, text, text, text) to anon, authenticated;
 grant execute on function public.save_barber_service_app_user(text, text, uuid, text, text, text, numeric, integer, text, text, integer, boolean) to anon, authenticated;
 grant execute on function public.set_barber_service_active_app_user(text, text, uuid, boolean) to anon, authenticated;
+grant execute on function public.delete_barber_service_app_user(text, text, uuid) to anon, authenticated;
 grant execute on function public.log_app_event(text, text, text, text, jsonb) to anon, authenticated;
 
 alter table public.barbers enable row level security;
@@ -1385,12 +1439,34 @@ create policy "public_read_active_barber_services"
   );
 
 drop policy if exists "staff_manage_barber_services" on public.barber_services;
-create policy "staff_manage_barber_services"
+drop policy if exists "staff_insert_barber_services" on public.barber_services;
+drop policy if exists "staff_update_barber_services" on public.barber_services;
+drop policy if exists "admin_delete_barber_services" on public.barber_services;
+
+create policy "staff_insert_barber_services"
   on public.barber_services
-  for all
+  for insert
+  to authenticated
+  with check (public.can_manage_barber(barber_id));
+
+create policy "staff_update_barber_services"
+  on public.barber_services
+  for update
   to authenticated
   using (public.can_manage_barber(barber_id))
-  with check (public.can_manage_barber(barber_id));
+  with check (
+    public.can_manage_barber(barber_id)
+    and (
+      public.is_admin()
+      or is_active = (select current_service.is_active from public.barber_services current_service where current_service.id = barber_services.id)
+    )
+  );
+
+create policy "admin_delete_barber_services"
+  on public.barber_services
+  for delete
+  to authenticated
+  using (public.is_admin());
 
 drop policy if exists "staff_read_customers" on public.customers;
 create policy "staff_read_customers"

@@ -17,6 +17,7 @@ export function PanelView({
   isSavingService,
   serviceActionId,
   onToggleServiceActive,
+  onDeleteService,
   onBeginCreateService,
   serviceFeedback,
   panelAppointments,
@@ -38,6 +39,7 @@ export function PanelView({
   const completedCount = agendaAppointments.filter((appointment) => appointment.status === "completed").length;
   const cancelledCount = agendaAppointments.filter((appointment) => appointment.status === "cancelled").length;
   const isBarber = session?.role === "barber";
+  const isAdmin = session?.role === "admin";
 
   return (
     <section className="layout-grid single-column">
@@ -192,7 +194,7 @@ export function PanelView({
                   <button className="primary-button" type="submit" disabled={isSavingService}>
                     {isSavingService ? "Salvando..." : "Salvar servico"}
                   </button>
-                  {serviceEditorForm?.id ? (
+                  {serviceEditorForm?.id && isAdmin ? (
                     <button
                       className="secondary-button danger-button"
                       type="button"
@@ -208,6 +210,20 @@ export function PanelView({
                         : managedServices.find((service) => service.id === serviceEditorForm.id)?.isActive
                           ? "Desativar"
                           : "Reativar"}
+                    </button>
+                  ) : null}
+                  {serviceEditorForm?.id && isAdmin ? (
+                    <button
+                      className="secondary-button danger-button"
+                      type="button"
+                      onClick={() =>
+                        onDeleteService(
+                          managedServices.find((service) => service.id === serviceEditorForm.id) ?? serviceEditorForm
+                        )
+                      }
+                      disabled={serviceActionId === serviceEditorForm.id}
+                    >
+                      {serviceActionId === serviceEditorForm.id ? "Excluindo..." : "Excluir"}
                     </button>
                   ) : null}
                   <button className="secondary-button" type="button" onClick={onBeginCreateService}>

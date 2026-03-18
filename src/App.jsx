@@ -14,6 +14,7 @@ import {
   createAppointment,
   createScheduleBlock,
   deleteScheduleBlock,
+  deleteService,
   getCurrentSessionProfile,
   logAppEvent,
   processNotificationQueue,
@@ -856,6 +857,27 @@ function App() {
     }
   }
 
+  async function handleDeleteService(service) {
+    const confirmed = window.confirm(`Excluir o servico "${service.name}" em definitivo?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setServiceActionId(service.id);
+    setServiceFeedback("");
+
+    try {
+      await deleteService(service.id, session);
+      setServiceFeedback("Servico excluido com sucesso.");
+      await refreshData(session);
+      setServiceEditorForm(createEmptyServiceDraft(managedBarberId));
+    } catch (error) {
+      setServiceFeedback(error.message || "Nao foi possivel excluir o servico.");
+    } finally {
+      setServiceActionId("");
+    }
+  }
+
   async function handleSaveCustomerNotes(customer) {
     setCustomerActionId(customer.id);
 
@@ -1140,6 +1162,7 @@ function App() {
           isSavingService={isSavingService}
           serviceActionId={serviceActionId}
           onToggleServiceActive={handleToggleServiceActive}
+          onDeleteService={handleDeleteService}
           onBeginCreateService={() => setServiceEditorForm(createEmptyServiceDraft())}
           serviceFeedback={serviceFeedback}
           panelAppointments={panelAppointments}
