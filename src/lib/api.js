@@ -951,7 +951,7 @@ export async function updateCustomerNotes(customerId, notes) {
   };
 }
 
-export async function saveBrandSettings(brandConfig) {
+export async function saveBrandSettings(brandConfig, sessionProfile = null) {
   if (!isSupabaseConfigured()) {
     return {
       source: "local",
@@ -960,6 +960,27 @@ export async function saveBrandSettings(brandConfig) {
   }
 
   const supabase = getSupabaseClient();
+  if (sessionProfile?.authMode === "app_users") {
+    const { data, error } = await supabase.rpc("save_brand_settings_app_user", {
+      input_email: sessionProfile.email,
+      input_password: sessionProfile.fallbackSecret,
+      input_logo_text: brandConfig.logoText?.trim() || "O Pai ta on",
+      input_logo_image_path: brandConfig.logoImagePath ?? "",
+      input_business_whatsapp: (brandConfig.businessWhatsapp ?? DEFAULT_BUSINESS_WHATSAPP).replace(/\D/g, ""),
+      input_hero_title: brandConfig.heroTitle?.trim() || "O Pai ta on",
+      input_hero_description: brandConfig.heroDescription?.trim() ?? ""
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      source: "supabase-app-users",
+      data: normalizeBrandConfig(data)
+    };
+  }
+
   const { data, error } = await supabase
     .from(BRAND_TABLE)
     .upsert(
@@ -986,7 +1007,7 @@ export async function saveBrandSettings(brandConfig) {
   };
 }
 
-export async function saveGalleryPost(post) {
+export async function saveGalleryPost(post, sessionProfile = null) {
   if (!isSupabaseConfigured()) {
     return {
       source: "local",
@@ -995,6 +1016,29 @@ export async function saveGalleryPost(post) {
   }
 
   const supabase = getSupabaseClient();
+  if (sessionProfile?.authMode === "app_users") {
+    const { data, error } = await supabase.rpc("save_gallery_post_app_user", {
+      input_email: sessionProfile.email,
+      input_password: sessionProfile.fallbackSecret,
+      input_post_id: post.id || null,
+      input_title: post.title.trim(),
+      input_caption: post.caption?.trim() ?? "",
+      input_tag: post.tag?.trim() ?? "",
+      input_image_path: post.imagePath ?? "",
+      input_sort_order: Number(post.sortOrder ?? 0),
+      input_is_active: post.isActive ?? true
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      source: "supabase-app-users",
+      data: normalizeGalleryPost(data)
+    };
+  }
+
   const payload = {
     title: post.title.trim(),
     caption: post.caption?.trim() ?? "",
@@ -1020,7 +1064,7 @@ export async function saveGalleryPost(post) {
   };
 }
 
-export async function setGalleryPostActive(postId, isActive) {
+export async function setGalleryPostActive(postId, isActive, sessionProfile = null) {
   if (!isSupabaseConfigured()) {
     return {
       source: "local",
@@ -1029,6 +1073,24 @@ export async function setGalleryPostActive(postId, isActive) {
   }
 
   const supabase = getSupabaseClient();
+  if (sessionProfile?.authMode === "app_users") {
+    const { data, error } = await supabase.rpc("set_gallery_post_active_app_user", {
+      input_email: sessionProfile.email,
+      input_password: sessionProfile.fallbackSecret,
+      input_post_id: postId,
+      input_is_active: isActive
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      source: "supabase-app-users",
+      data: normalizeGalleryPost(data)
+    };
+  }
+
   const { data, error } = await supabase
     .from(GALLERY_TABLE)
     .update({ is_active: isActive })
@@ -1046,7 +1108,7 @@ export async function setGalleryPostActive(postId, isActive) {
   };
 }
 
-export async function uploadMediaAsset(file, folder = "general") {
+export async function uploadMediaAsset(file, folder = "general", sessionProfile = null) {
   if (!isSupabaseConfigured()) {
     return {
       source: "local",
@@ -1067,6 +1129,11 @@ export async function uploadMediaAsset(file, folder = "general") {
     .replace(/(^-|-$)/g, "");
   const path = `${folder}/${Date.now()}-${safeBaseName || "asset"}.${extension}`;
   const supabase = getSupabaseClient();
+
+  if (sessionProfile?.authMode === "app_users") {
+    throw new Error("Upload de imagem exige login admin completo no Supabase Auth.");
+  }
+
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
     cacheControl: "3600",
     upsert: false

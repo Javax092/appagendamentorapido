@@ -1,14 +1,63 @@
-import { motion } from "framer-motion";
-import editorialPortrait from "../assets/portrait-editorial.svg";
-import heritagePortrait from "../assets/portrait-heritage.svg";
+import { AnimatePresence, motion } from "framer-motion";
+import { useMemo, useState } from "react";
 import { formatCurrency, formatDateLabel, formatLongDate } from "../utils/schedule";
 
-const showcaseImage = "/paion2.png";
+function getInitials(name) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-const portraitMap = {
-  heritage: heritagePortrait,
-  editorial: editorialPortrait
-};
+function groupSlotsByPeriod(slots) {
+  return {
+    morning: slots.filter((slot) => Number(slot.value.slice(0, 2)) < 12),
+    afternoon: slots.filter((slot) => Number(slot.value.slice(0, 2)) >= 12)
+  };
+}
+
+function ProgressDots({ steps, currentStep }) {
+  return (
+    <div className="booking-progress-sticky">
+      <div className="booking-progress-dots">
+        {steps.map((step, index) => {
+          const isCurrent = currentStep === index;
+          const isDone = step.complete || index < currentStep;
+
+          return (
+            <div
+              key={step.id}
+              className={`booking-progress-dot ${isCurrent ? "current" : ""} ${isDone ? "done" : ""}`}
+            >
+              <span>{isDone ? "✓" : index + 1}</span>
+              <small>{step.label}</small>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StepFrame({ children, direction, stepKey }) {
+  return (
+    <AnimatePresence mode="wait" custom={direction}>
+      <motion.section
+        key={stepKey}
+        className="booking-step-frame"
+        custom={direction}
+        initial={{ opacity: 0, x: direction >= 0 ? 42 : -42 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: direction >= 0 ? -42 : 42 }}
+        transition={{ duration: 0.24, ease: "easeOut" }}
+      >
+        {children}
+      </motion.section>
+    </AnimatePresence>
+  );
+}
 
 export function BookingView({
   barbers,
@@ -43,280 +92,278 @@ export function BookingView({
   bookingMomentLabel,
   isBookingReady
 }) {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const slotsByPeriod = useMemo(() => groupSlotsByPeriod(availableSlots), [availableSlots]);
+  const canAdvance = [
+    Boolean(selectedBarberId),
+    selectedServiceIds.length > 0,
+    Boolean(selectedTime),
+    isBookingReady
+  ];
+
+  function goToStep(nextStep) {
+    setDirection(nextStep > currentStep ? 1 : -1);
+    setCurrentStep(nextStep);
+  }
+
+  function handleAdvance() {
+    if (currentStep < 3 && canAdvance[currentStep]) {
+      goToStep(currentStep + 1);
+    }
+  }
+
+  function handleBack() {
+    if (currentStep > 0) {
+      goToStep(currentStep - 1);
+    }
+  }
+
+  async function handleConfirm() {
+    const result = await onConfirmBooking();
+    if (result?.ok) {
+      setDirection(1);
+      setCurrentStep(3);
+    }
+  }
+
   return (
-    <section className="layout-grid">
-      <section className="glass-card">
-        <div className="booking-flow-head">
-          <div className="section-head">
-            <div>
-              <span className="mini-badge">Reserva</span>
-              <h2>Agendamento rapido e claro</h2>
-            </div>
-            <p>{bookingStatusMessage}</p>
-          </div>
+    <section className="booking-wizard-shell">
+      <div className="glass-card booking-wizard-card">
+        <ProgressDots steps={bookingProgress.steps} currentStep={currentStep} />
 
-          <div className="booking-progress">
-            {bookingProgress.steps.map((step, index) => (
-              <div key={step.id} className={`progress-step ${step.complete ? "complete" : ""}`}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <strong>{step.label}</strong>
+        <StepFrame direction={direction} stepKey={`step-${currentStep}`}>
+          {currentStep === 0 ? (
+            <div className="booking-step-content">
+              <div className="booking-step-head">
+                <span className="mini-badge">Passo 1</span>
+                <h2>Escolha o profissional</h2>
+                <p>{bookingStatusMessage}</p>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="section-head">
-          <div>
-            <span className="mini-badge">Passo 1</span>
-            <h2>Escolha o profissional</h2>
-          </div>
-          <p>Selecione o barbeiro e monte o atendimento em poucos passos.</p>
-        </div>
-
-        <div className="barber-grid">
-          {barbers.map((barber) => (
-            <button
-              key={barber.id}
-              className={`barber-card ${selectedBarberId === barber.id ? "active" : ""}`}
-              onClick={() => onSelectBarber(barber.id)}
-            >
-              <img
-                className="portrait-frame"
-                src={portraitMap[barber.photoKey] ?? heritagePortrait}
-                alt={barber.name}
-              />
-              <div>
-                <span className="tag">{barber.role}</span>
-                <strong>{barber.name}</strong>
-                <p>{barber.specialty}</p>
-                <small>
-                  Expediente {barber.workingHours.start} - {barber.workingHours.end}
-                </small>
+              <div className="booking-barber-compact-grid">
+                {barbers.map((barber) => (
+                  <button
+                    key={barber.id}
+                    className={`booking-barber-compact-card ${selectedBarberId === barber.id ? "active" : ""}`}
+                    onClick={() => onSelectBarber(barber.id)}
+                  >
+                    <div className="booking-avatar">{getInitials(barber.name)}</div>
+                    <strong>{barber.name}</strong>
+                    <small>{barber.specialty}</small>
+                    <span>{barber.workingHours.start} - {barber.workingHours.end}</span>
+                  </button>
+                ))}
               </div>
-            </button>
-          ))}
-        </div>
 
-        <div className="section-head">
-          <div>
-            <span className="mini-badge">Passo 2</span>
-            <h2>Monte o atendimento</h2>
-          </div>
-          <p>Servicos e valores do profissional selecionado.</p>
-        </div>
-
-        <div className="service-grid">
-          {bookingServices.map((service) => {
-            const active = selectedServiceIds.includes(service.id);
-            return (
-              <button
-                key={service.id}
-                className={`service-card ${active ? "active" : ""}`}
-                onClick={() => onToggleService(service.id)}
-              >
-                <span className="tag">{service.badge}</span>
-                <div className="service-topline">
-                  <strong>{service.name}</strong>
-                  <span>{formatCurrency(service.price)}</span>
-                </div>
-                <small>{service.category}</small>
-                <p>{service.description}</p>
-                <em>{service.duration} min</em>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="section-head">
-          <div>
-            <span className="mini-badge">Passo 3</span>
-            <h2>Escolha data e horario</h2>
-          </div>
-          <p>Somente horarios realmente disponiveis.</p>
-        </div>
-
-        <div className="day-row">
-          {dateOptions.map((date) => (
-            <button
-              key={date}
-              className={`day-chip ${selectedDate === date ? "active" : ""}`}
-              onClick={() => onSelectDate(date)}
-            >
-              {formatDateLabel(date)}
-            </button>
-          ))}
-        </div>
-
-        <div className="time-grid">
-          {availableSlots.map((slot) => (
-            <button
-              key={slot.value}
-              className={`time-chip time-chip-${slot.heat || "blocked"} ${selectedTime === slot.value ? "active" : ""}`}
-              disabled={slot.disabled || isLoading}
-              onClick={() => onSelectTime(slot.value)}
-              title={slot.heatLabel ? `${slot.heatLabel} • ${slot.confidence}%` : slot.value}
-            >
-              <span>{slot.value}</span>
-              <small>{slot.heatLabel || "Bloqueado"}</small>
-            </button>
-          ))}
-        </div>
-
-        <div className="heatmap-legend">
-          <span><i className="heat-dot heat-easy" /> Verde = facil encaixe</span>
-          <span><i className="heat-dot heat-tight" /> Amarelo = agenda apertada</span>
-          <span><i className="heat-dot heat-blocked" /> Cinza = bloqueado</span>
-        </div>
-
-        {recommendedSlots.length ? (
-          <div className="recommended-strip">
-            <span className="mini-badge">Mais rapido</span>
-            <div className="recommended-actions">
-              {recommendedSlots.map((slot) => (
-                <button
-                  key={slot.value}
-                  className={`secondary-button compact-button ${selectedTime === slot.value ? "selected" : ""}`}
-                  onClick={() => onSelectTime(slot.value)}
-                >
-                  {slot.value}
+              <div className="booking-step-actions">
+                <button className="secondary-button" onClick={onResetBooking} type="button">
+                  Limpar
                 </button>
-              ))}
+                <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[0]}>
+                  Proximo
+                </button>
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="section-head">
-          <div>
-            <span className="mini-badge">Passo 4</span>
-            <h2>Confirme os dados</h2>
-          </div>
-          <p>Dados para confirmar o atendimento com rapidez.</p>
-        </div>
+          {currentStep === 1 ? (
+            <div className="booking-step-content">
+              <div className="booking-step-head">
+                <span className="mini-badge">Passo 2</span>
+                <h2>Selecione os servicos</h2>
+                <p>Monte seu atendimento com selecao multipla.</p>
+              </div>
 
-        <div className="form-grid">
-          <label>
-            Nome
-            <input value={clientName} onChange={(event) => onClientNameChange(event.target.value)} />
-          </label>
-          <label>
-            WhatsApp
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={20}
-              placeholder="(92) 99999-9999"
-              value={clientWhatsapp}
-              onChange={(event) => onClientWhatsappChange(event.target.value)}
-            />
-            <small className="field-hint">Use DDD e numero com WhatsApp ativo.</small>
-          </label>
-          <label className="full">
-            Observacoes
-            <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} />
-          </label>
-        </div>
+              <div className="booking-services-pills">
+                {bookingServices.map((service) => {
+                  const active = selectedServiceIds.includes(service.id);
 
-        <div className="actions-row">
-          <button
-            className="primary-button"
-            onClick={onConfirmBooking}
-            disabled={!isBookingReady || isSaving || isLoading}
-          >
-            {isSaving ? "Salvando..." : "Confirmar reserva"}
-          </button>
-          <button className="secondary-button" onClick={onResetBooking}>
-            Limpar formulario
-          </button>
-        </div>
-      </section>
+                  return (
+                    <button
+                      key={service.id}
+                      className={`booking-service-pill ${active ? "active" : ""}`}
+                      onClick={() => onToggleService(service.id)}
+                      type="button"
+                    >
+                      <strong>{service.name}</strong>
+                      <span>{formatCurrency(service.price)}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-      <aside className="glass-card summary-card">
-        <div className="section-head">
-          <div>
-            <span className="mini-badge">Resumo</span>
-            <h2>Sua reserva</h2>
-          </div>
-        </div>
-
-        <div className="summary-visual">
-          <img src={showcaseImage} alt="Corte em destaque da barbearia" />
-          <div className="summary-visual-copy">
-            <strong>{selectedBarber?.name || "Atendimento premium"}</strong>
-            <span>{selectedBarber?.specialty || "Corte, barba e acabamento com atendimento profissional."}</span>
-          </div>
-        </div>
-
-        <dl className="summary-list">
-          <div><dt>Profissional</dt><dd>{selectedBarber?.name || "-"}</dd></div>
-          <div><dt>Servicos</dt><dd>{summaryServices || "Selecione ao menos um servico"}</dd></div>
-          <div><dt>Data</dt><dd>{formatLongDate(selectedDate)}</dd></div>
-          <div><dt>Horario</dt><dd>{selectedTime || "Selecione um horario"}</dd></div>
-          <div><dt>Tempo reservado</dt><dd>{totals.totalDuration} min</dd></div>
-          <div><dt>Total</dt><dd>{formatCurrency(totals.subtotal)}</dd></div>
-        </dl>
-
-        <div className="summary-progress-card">
-          <span className="mini-badge">Checklist</span>
-          <strong>
-            {bookingProgress.completed}/{bookingProgress.total} etapas concluidas
-          </strong>
-          <p>{bookingStatusMessage}</p>
-        </div>
-
-        <div className="memory-card">
-          <span className="mini-badge">Tom pessoal</span>
-          <strong>Resumo inteligente</strong>
-          <p>{bookingMomentLabel}</p>
-        </div>
-
-        {confirmation ? (
-          <motion.div
-            className="confirmation-box"
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.34, ease: "easeOut" }}
-          >
-            <div className="celebration-row" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
+              <div className="booking-step-footer">
+                <div className="booking-inline-total">
+                  <strong>Total</strong>
+                  <span>{formatCurrency(totals.subtotal)} • {totals.totalDuration} min</span>
+                </div>
+                <div className="booking-step-actions">
+                  <button className="secondary-button" onClick={handleBack} type="button">
+                    Voltar
+                  </button>
+                  <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[1]}>
+                    Proximo
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="confirmation-top">
-              <span className="mini-badge">Confirmado</span>
-              <strong>{confirmation.id}</strong>
+          ) : null}
+
+          {currentStep === 2 ? (
+            <div className="booking-step-content">
+              <div className="booking-step-head">
+                <span className="mini-badge">Passo 3</span>
+                <h2>Escolha data e horario</h2>
+                <p>Slots com leitura visual de disponibilidade.</p>
+              </div>
+
+              <div className="day-row booking-day-row">
+                {dateOptions.map((date) => (
+                  <button
+                    key={date}
+                    className={`day-chip ${selectedDate === date ? "active" : ""}`}
+                    onClick={() => onSelectDate(date)}
+                    type="button"
+                  >
+                    {formatDateLabel(date)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="booking-time-periods">
+                <div className="booking-time-period">
+                  <strong>Manha</strong>
+                  <div className="booking-time-grid-compact">
+                    {slotsByPeriod.morning.map((slot) => (
+                      <button
+                        key={slot.value}
+                        className={`time-chip time-chip-${slot.heat || "blocked"} ${recommendedSlots.some((item) => item.value === slot.value) ? "recommended" : ""} ${selectedTime === slot.value ? "active" : ""}`}
+                        disabled={slot.disabled || isLoading}
+                        onClick={() => onSelectTime(slot.value)}
+                        type="button"
+                      >
+                        <span>{slot.value}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="booking-time-period">
+                  <strong>Tarde</strong>
+                  <div className="booking-time-grid-compact">
+                    {slotsByPeriod.afternoon.map((slot) => (
+                      <button
+                        key={slot.value}
+                        className={`time-chip time-chip-${slot.heat || "blocked"} ${recommendedSlots.some((item) => item.value === slot.value) ? "recommended" : ""} ${selectedTime === slot.value ? "active" : ""}`}
+                        disabled={slot.disabled || isLoading}
+                        onClick={() => onSelectTime(slot.value)}
+                        type="button"
+                      >
+                        <span>{slot.value}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="heatmap-legend booking-legend-tight">
+                <span><i className="heat-dot heat-easy" /> Facil</span>
+                <span><i className="heat-dot heat-tight" /> Recomendado</span>
+                <span><i className="heat-dot heat-blocked" /> Bloqueado</span>
+              </div>
+
+              <div className="booking-step-actions">
+                <button className="secondary-button" onClick={handleBack} type="button">
+                  Voltar
+                </button>
+                <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[2]}>
+                  Proximo
+                </button>
+              </div>
             </div>
-            <div className="confirmation-check">✓</div>
-            <p>
-              Reserva confirmada para {formatLongDate(confirmation.date)} as {confirmation.startTime} com{" "}
-              {confirmation.barber?.name}.
-            </p>
-            <div className="confirmation-details">
-              <span>Cliente: {confirmation.clientName}</span>
-              <span>WhatsApp: {confirmation.clientWhatsapp}</span>
+          ) : null}
+
+          {currentStep === 3 ? (
+            <div className="booking-step-content">
+              <div className="booking-step-head">
+                <span className="mini-badge">Passo 4</span>
+                <h2>Confirme seus dados</h2>
+                <p>{bookingMomentLabel}</p>
+              </div>
+
+              <div className="booking-summary-collapsed">
+                <strong>{selectedBarber?.name || "-"}</strong>
+                <span>{summaryServices || "Selecione servicos"}</span>
+                <span>{formatLongDate(selectedDate)} • {selectedTime || "Sem horario"}</span>
+                <span>{formatCurrency(totals.subtotal)}</span>
+              </div>
+
+              <div className="form-grid booking-form-grid">
+                <label>
+                  Nome
+                  <input value={clientName} onChange={(event) => onClientNameChange(event.target.value)} />
+                </label>
+                <label>
+                  WhatsApp
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={20}
+                    placeholder="(92) 99999-9999"
+                    value={clientWhatsapp}
+                    onChange={(event) => onClientWhatsappChange(event.target.value)}
+                  />
+                </label>
+                <label className="full">
+                  Observacao
+                  <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} />
+                </label>
+              </div>
+
+              {confirmation ? (
+                <motion.div
+                  className="confirmation-box booking-confirmation-inline"
+                  initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.34, ease: "easeOut" }}
+                >
+                  <div className="celebration-row" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="confirmation-top">
+                    <span className="mini-badge">Confirmado</span>
+                    <strong>{confirmation.id}</strong>
+                  </div>
+                  <div className="confirmation-check">✓</div>
+                  <p>
+                    Reserva confirmada para {formatLongDate(confirmation.date)} as {confirmation.startTime} com{" "}
+                    {confirmation.barber?.name}.
+                  </p>
+                </motion.div>
+              ) : null}
+
+              <div className="booking-step-actions">
+                <button className="secondary-button" onClick={handleBack} type="button">
+                  Voltar
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={handleConfirm}
+                  type="button"
+                  disabled={!isBookingReady || isSaving || isLoading}
+                >
+                  {isSaving ? "Salvando..." : "Confirmar"}
+                </button>
+              </div>
             </div>
-            <div className="actions-stack">
-              <a className="primary-button" href={confirmation.clientWhatsappLink} target="_blank" rel="noreferrer">
-                Enviar confirmacao
-              </a>
-              <a className="secondary-button" href={confirmation.barberWhatsappLink} target="_blank" rel="noreferrer">
-                Avisar barbeiro
-              </a>
-              <a className="secondary-button" href={confirmation.rescheduleWhatsappLink} target="_blank" rel="noreferrer">
-                Remarcar no WhatsApp
-              </a>
-              <a className="secondary-button danger-button" href={confirmation.cancelWhatsappLink} target="_blank" rel="noreferrer">
-                Cancelar no WhatsApp
-              </a>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="notice-box">
-            Revise os dados e finalize o agendamento quando o checklist estiver completo.
-          </div>
-        )}
-      </aside>
+          ) : null}
+        </StepFrame>
+      </div>
     </section>
   );
 }

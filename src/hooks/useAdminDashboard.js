@@ -265,7 +265,7 @@ export function useAdminDashboard({
     setIsSavingBrand(true);
 
     try {
-      const saved = await saveBrandSettings(brandEditor);
+      const saved = await saveBrandSettings(brandEditor, session);
       setBrandConfig(saved.data);
       setBrandEditor(saved.data);
       setStaffFeedback("Marca atualizada.");
@@ -282,7 +282,7 @@ export function useAdminDashboard({
     }
 
     try {
-      const uploaded = await uploadMediaAsset(file, "branding");
+      const uploaded = await uploadMediaAsset(file, "branding", session);
       setBrandEditor((current) => ({
         ...current,
         logoImagePath: uploaded.data.path,
@@ -304,7 +304,7 @@ export function useAdminDashboard({
     setIsSavingGalleryPost(true);
 
     try {
-      const saved = await saveGalleryPost(galleryEditorForm);
+      const saved = await saveGalleryPost(galleryEditorForm, session);
       setGalleryEditorForm(saved.data);
       await refreshData(session);
       setStaffFeedback("Post da galeria salvo.");
@@ -319,7 +319,7 @@ export function useAdminDashboard({
     setGalleryActionId(post.id);
 
     try {
-      await setGalleryPostActive(post.id, !post.isActive);
+      await setGalleryPostActive(post.id, !post.isActive, session);
       await refreshData(session);
     } finally {
       setGalleryActionId("");
@@ -332,7 +332,7 @@ export function useAdminDashboard({
     }
 
     try {
-      const uploaded = await uploadMediaAsset(file, "gallery");
+      const uploaded = await uploadMediaAsset(file, "gallery", session);
       setGalleryEditorForm((current) => ({
         ...current,
         imagePath: uploaded.data.path,

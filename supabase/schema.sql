@@ -1288,6 +1288,183 @@ begin
 end;
 $$;
 
+create or replace function public.save_brand_settings_app_user(
+  input_email text,
+  input_password text,
+  input_logo_text text,
+  input_logo_image_path text,
+  input_business_whatsapp text,
+  input_hero_title text,
+  input_hero_description text
+)
+returns public.app_brand_settings
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor record;
+  saved_settings public.app_brand_settings%rowtype;
+begin
+  select *
+  into actor
+  from public.authenticate_staff(input_email, input_password)
+  limit 1;
+
+  if actor.user_id is null then
+    raise exception 'Credenciais invalidas.';
+  end if;
+
+  if actor.role <> 'admin' then
+    raise exception 'Somente admin pode alterar a marca.';
+  end if;
+
+  insert into public.app_brand_settings (
+    id,
+    logo_text,
+    logo_image_path,
+    business_whatsapp,
+    hero_title,
+    hero_description
+  )
+  values (
+    1,
+    coalesce(nullif(trim(input_logo_text), ''), 'O Pai ta on'),
+    coalesce(input_logo_image_path, ''),
+    coalesce(nullif(regexp_replace(input_business_whatsapp, '\D', '', 'g'), ''), '5592986202729'),
+    coalesce(nullif(trim(input_hero_title), ''), 'O Pai ta on'),
+    coalesce(trim(input_hero_description), '')
+  )
+  on conflict (id) do update
+  set
+    logo_text = excluded.logo_text,
+    logo_image_path = excluded.logo_image_path,
+    business_whatsapp = excluded.business_whatsapp,
+    hero_title = excluded.hero_title,
+    hero_description = excluded.hero_description
+  returning * into saved_settings;
+
+  return saved_settings;
+end;
+$$;
+
+create or replace function public.save_gallery_post_app_user(
+  input_email text,
+  input_password text,
+  input_post_id uuid,
+  input_title text,
+  input_caption text,
+  input_tag text,
+  input_image_path text,
+  input_sort_order integer,
+  input_is_active boolean
+)
+returns public.gallery_posts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor record;
+  saved_post public.gallery_posts%rowtype;
+begin
+  select *
+  into actor
+  from public.authenticate_staff(input_email, input_password)
+  limit 1;
+
+  if actor.user_id is null then
+    raise exception 'Credenciais invalidas.';
+  end if;
+
+  if actor.role <> 'admin' then
+    raise exception 'Somente admin pode editar a galeria.';
+  end if;
+
+  if coalesce(trim(input_title), '') = '' then
+    raise exception 'Informe o titulo do post.';
+  end if;
+
+  if input_post_id is not null then
+    update public.gallery_posts
+    set
+      title = trim(input_title),
+      caption = coalesce(trim(input_caption), ''),
+      tag = coalesce(trim(input_tag), ''),
+      image_path = coalesce(input_image_path, ''),
+      sort_order = coalesce(input_sort_order, 0),
+      is_active = coalesce(input_is_active, true)
+    where id = input_post_id
+    returning * into saved_post;
+
+    if saved_post.id is null then
+      raise exception 'Post nao encontrado.';
+    end if;
+  else
+    insert into public.gallery_posts (
+      title,
+      caption,
+      tag,
+      image_path,
+      sort_order,
+      is_active
+    )
+    values (
+      trim(input_title),
+      coalesce(trim(input_caption), ''),
+      coalesce(trim(input_tag), ''),
+      coalesce(input_image_path, ''),
+      coalesce(input_sort_order, 0),
+      coalesce(input_is_active, true)
+    )
+    returning * into saved_post;
+  end if;
+
+  return saved_post;
+end;
+$$;
+
+create or replace function public.set_gallery_post_active_app_user(
+  input_email text,
+  input_password text,
+  input_post_id uuid,
+  input_is_active boolean
+)
+returns public.gallery_posts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor record;
+  saved_post public.gallery_posts%rowtype;
+begin
+  select *
+  into actor
+  from public.authenticate_staff(input_email, input_password)
+  limit 1;
+
+  if actor.user_id is null then
+    raise exception 'Credenciais invalidas.';
+  end if;
+
+  if actor.role <> 'admin' then
+    raise exception 'Somente admin pode alterar a exibicao da galeria.';
+  end if;
+
+  update public.gallery_posts
+  set is_active = input_is_active
+  where id = input_post_id
+  returning * into saved_post;
+
+  if saved_post.id is null then
+    raise exception 'Post nao encontrado.';
+  end if;
+
+  return saved_post;
+end;
+$$;
+
 create or replace function public.public_booking_snapshot()
 returns jsonb
 language sql
@@ -1395,6 +1572,9 @@ grant execute on function public.update_appointment_status_app_user(text, text, 
 grant execute on function public.save_barber_service_app_user(text, text, uuid, text, text, text, numeric, integer, text, text, integer, boolean) to anon, authenticated;
 grant execute on function public.set_barber_service_active_app_user(text, text, uuid, boolean) to anon, authenticated;
 grant execute on function public.delete_barber_service_app_user(text, text, uuid) to anon, authenticated;
+grant execute on function public.save_brand_settings_app_user(text, text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.save_gallery_post_app_user(text, text, uuid, text, text, text, text, integer, boolean) to anon, authenticated;
+grant execute on function public.set_gallery_post_active_app_user(text, text, uuid, boolean) to anon, authenticated;
 grant execute on function public.log_app_event(text, text, text, text, jsonb) to anon, authenticated;
 
 alter table public.barbers enable row level security;
