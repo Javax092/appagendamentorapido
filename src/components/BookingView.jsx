@@ -20,6 +20,7 @@ export function BookingView({
   selectedDate,
   onSelectDate,
   availableSlots,
+  recommendedSlots,
   selectedTime,
   onSelectTime,
   clientName,
@@ -35,14 +36,36 @@ export function BookingView({
   selectedBarber,
   summaryServices,
   totals,
-  confirmation
+  confirmation,
+  bookingProgress,
+  bookingStatusMessage,
+  isBookingReady
 }) {
   return (
     <section className="layout-grid">
       <section className="glass-card">
+        <div className="booking-flow-head">
+          <div className="section-head">
+            <div>
+              <span className="mini-badge">Reserva</span>
+              <h2>Agendamento rapido e claro</h2>
+            </div>
+            <p>{bookingStatusMessage}</p>
+          </div>
+
+          <div className="booking-progress">
+            {bookingProgress.steps.map((step, index) => (
+              <div key={step.id} className={`progress-step ${step.complete ? "complete" : ""}`}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <strong>{step.label}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="section-head">
           <div>
-            <span className="mini-badge">Reserva</span>
+            <span className="mini-badge">Passo 1</span>
             <h2>Escolha o profissional</h2>
           </div>
           <p>Selecione o barbeiro e monte o atendimento em poucos passos.</p>
@@ -74,7 +97,7 @@ export function BookingView({
 
         <div className="section-head">
           <div>
-            <span className="mini-badge">Catalogo</span>
+            <span className="mini-badge">Passo 2</span>
             <h2>Monte o atendimento</h2>
           </div>
           <p>Servicos e valores do profissional selecionado.</p>
@@ -104,7 +127,7 @@ export function BookingView({
 
         <div className="section-head">
           <div>
-            <span className="mini-badge">Disponibilidade</span>
+            <span className="mini-badge">Passo 3</span>
             <h2>Escolha data e horario</h2>
           </div>
           <p>Somente horarios realmente disponiveis.</p>
@@ -135,9 +158,26 @@ export function BookingView({
           ))}
         </div>
 
+        {recommendedSlots.length ? (
+          <div className="recommended-strip">
+            <span className="mini-badge">Mais rapido</span>
+            <div className="recommended-actions">
+              {recommendedSlots.map((slot) => (
+                <button
+                  key={slot.value}
+                  className={`secondary-button compact-button ${selectedTime === slot.value ? "selected" : ""}`}
+                  onClick={() => onSelectTime(slot.value)}
+                >
+                  {slot.value}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="section-head">
           <div>
-            <span className="mini-badge">Cliente</span>
+            <span className="mini-badge">Passo 4</span>
             <h2>Confirme os dados</h2>
           </div>
           <p>Dados para confirmar o atendimento com rapidez.</p>
@@ -167,7 +207,11 @@ export function BookingView({
         </div>
 
         <div className="actions-row">
-          <button className="primary-button" onClick={onConfirmBooking} disabled={isSaving || isLoading}>
+          <button
+            className="primary-button"
+            onClick={onConfirmBooking}
+            disabled={!isBookingReady || isSaving || isLoading}
+          >
             {isSaving ? "Salvando..." : "Confirmar reserva"}
           </button>
           <button className="secondary-button" onClick={onResetBooking}>
@@ -201,6 +245,14 @@ export function BookingView({
           <div><dt>Total</dt><dd>{formatCurrency(totals.subtotal)}</dd></div>
         </dl>
 
+        <div className="summary-progress-card">
+          <span className="mini-badge">Checklist</span>
+          <strong>
+            {bookingProgress.completed}/{bookingProgress.total} etapas concluidas
+          </strong>
+          <p>{bookingStatusMessage}</p>
+        </div>
+
         {confirmation ? (
           <div className="confirmation-box">
             <div className="confirmation-top">
@@ -232,7 +284,7 @@ export function BookingView({
           </div>
         ) : (
           <div className="notice-box">
-            Revise os dados e finalize o agendamento.
+            Revise os dados e finalize o agendamento quando o checklist estiver completo.
           </div>
         )}
       </aside>

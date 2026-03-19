@@ -444,6 +444,47 @@ a {
   grid-template-columns: 1fr;
 }
 
+.booking-flow-head {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.booking-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.progress-step,
+.summary-progress-card,
+.recommended-strip {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 244, 227, 0.03);
+}
+
+.progress-step {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.progress-step span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+}
+
+.progress-step strong {
+  font-size: 1rem;
+}
+
+.progress-step.complete {
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, rgba(223, 165, 76, 0.16), rgba(255, 244, 227, 0.04));
+}
+
 .glass-card,
 .subsection-card {
   padding: 28px;
@@ -622,6 +663,21 @@ a {
   margin-top: 18px;
 }
 
+.recommended-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin: -4px 0 26px;
+  padding: 16px 18px;
+}
+
+.recommended-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .actions-stack {
   display: grid;
   gap: 10px;
@@ -648,6 +704,12 @@ a {
   background: rgba(255, 244, 227, 0.04);
   border-color: var(--line);
   color: var(--text);
+}
+
+.secondary-button.selected {
+  border-color: var(--line-strong);
+  background: rgba(223, 165, 76, 0.14);
+  color: var(--gold-strong);
 }
 
 .danger-button {
@@ -716,6 +778,18 @@ a {
 .summary-visual-copy span {
   color: var(--muted);
   line-height: 1.5;
+}
+
+.summary-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.summary-progress-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .confirmation-box,
@@ -940,7 +1014,8 @@ a {
   }
 
   .admin-stats,
-  .finance-strip {
+  .finance-strip,
+  .booking-progress {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -970,12 +1045,18 @@ a {
   .admin-filters,
   .time-grid,
   .compact-grid,
-  .admin-card {
+  .admin-card,
+  .booking-progress {
     grid-template-columns: 1fr;
   }
 
   .barber-card {
     grid-template-columns: 1fr;
+  }
+
+  .recommended-strip {
+    align-items: start;
+    flex-direction: column;
   }
 
   .portrait-frame {
