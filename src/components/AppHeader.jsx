@@ -7,7 +7,7 @@ const customSpotlightPortrait = "/paion2.png";
 const roleLabels = {
   client: "Cliente",
   barber: "Barbeiro",
-  admin: "Admin"
+  admin: "Admin",
 };
 
 export function AppHeader({
@@ -35,13 +35,17 @@ export function AppHeader({
   themeMode,
   onToggleTheme,
   canInstallApp,
-  onInstallApp
+  onInstallApp,
 }) {
   return (
     <header className="hero-card">
       <div className="hero-copy">
         <div className="brand-lockup">
-          <img className="brand-logo" src={brandConfig.logoImageUrl || customLogo} alt={brandConfig.logoText} />
+          <img
+            className="brand-logo"
+            src={brandConfig.logoImageUrl || customLogo}
+            alt={brandConfig.logoText}
+          />
           <div>
             <span className="eyebrow">Barbearia</span>
             <h1>{brandConfig.logoText}</h1>
@@ -57,19 +61,30 @@ export function AppHeader({
         </div>
         <div className="hero-actions">
           {canInstallApp ? (
-            <button className="primary-button compact-button" onClick={onInstallApp} type="button">
+            <button
+              className="primary-button compact-button"
+              onClick={onInstallApp}
+              type="button"
+            >
               Instalar app
             </button>
           ) : null}
-          <button className="secondary-button compact-button" onClick={onToggleTheme} type="button">
+          <button
+            className="secondary-button compact-button"
+            onClick={onToggleTheme}
+            type="button"
+          >
             {themeMode === "dark" ? "Modo claro" : "Modo escuro"}
           </button>
-          <span className="tag">PWA pronto</span>
         </div>
       </div>
 
       <div className="hero-visual">
-        <img className="hero-backdrop" src={heroBackdrop} alt="Ambiente da barbearia" />
+        <img
+          className="hero-backdrop"
+          src={heroBackdrop}
+          alt="Ambiente da barbearia"
+        />
         <div className="spotlight-card">
           <span className="mini-badge">Destaque</span>
           <div className="spotlight-row">
@@ -79,11 +94,16 @@ export function AppHeader({
               alt="Corte em destaque"
             />
             <div>
-              <strong>{selectedBarber?.name || "Atendimento de assinatura"}</strong>
-              <p>{selectedBarber?.heroTagline || "Corte, barba e acabamento com leitura profissional em cada detalhe."}</p>
+              <strong>
+                {selectedBarber?.name || "Atendimento de assinatura"}
+              </strong>
+              <p>
+                {selectedBarber?.heroTagline ||
+                  "Corte, barba e acabamento com leitura profissional em cada detalhe."}
+              </p>
             </div>
           </div>
-          <small>Reserva online com apresentacao premium e confirmacao rapida.</small>
+          <small>Reserva online</small>
         </div>
       </div>
 
@@ -113,7 +133,10 @@ export function AppHeader({
               <span className="mini-badge">{roleLabels[session.role]}</span>
               <strong>{session.fullName}</strong>
               <span>{session.email}</span>
-              <button className="secondary-button compact-button" onClick={onLogout}>
+              <button
+                className="secondary-button compact-button"
+                onClick={onLogout}
+              >
                 Sair
               </button>
             </>
@@ -130,51 +153,82 @@ export function AppHeader({
                       type="password"
                       placeholder="Nova senha"
                       value={recoveryPassword}
-                      onChange={(event) => onRecoveryPasswordChange(event.target.value)}
+                      onChange={(event) =>
+                        onRecoveryPasswordChange(event.target.value)
+                      }
                     />
-                    <button className="primary-button compact-button" type="submit" disabled={isFinishingRecovery}>
-                      {isFinishingRecovery ? "Atualizando..." : "Definir nova senha"}
+                    <button
+                      className="primary-button compact-button"
+                      type="submit"
+                      disabled={isFinishingRecovery}
+                    >
+                      {isFinishingRecovery
+                        ? "Atualizando..."
+                        : "Definir nova senha"}
                     </button>
-                    {passwordResetFeedback ? <small>{passwordResetFeedback}</small> : null}
+                    {passwordResetFeedback ? (
+                      <small>{passwordResetFeedback}</small>
+                    ) : null}
                   </form>
                 </>
               ) : (
                 <>
                   <div className="auth-heading">
                     <span className="mini-badge">Equipe</span>
-                    <p>Acesso rapido para barbeiros e administracao.</p>
+                    <p>Acesso rapido.</p>
                   </div>
                   <form className="auth-form" onSubmit={onLogin}>
                     <input
                       type="email"
                       placeholder="Email da equipe"
                       value={loginForm.email}
-                      onChange={(event) => onLoginFormChange("email", event.target.value)}
+                      onChange={(event) =>
+                        onLoginFormChange("email", event.target.value)
+                      }
                     />
                     <input
                       type="password"
                       placeholder="Senha"
                       value={loginForm.password}
-                      onChange={(event) => onLoginFormChange("password", event.target.value)}
+                      onChange={(event) =>
+                        onLoginFormChange("password", event.target.value)
+                      }
                     />
-                    <button className="primary-button compact-button" type="submit" disabled={isAuthenticating}>
+                    <button
+                      className="primary-button compact-button"
+                      type="submit"
+                      disabled={isAuthenticating}
+                    >
                       {isAuthenticating ? "Entrando..." : "Entrar"}
                     </button>
                     {authError ? <small>{authError}</small> : null}
                   </form>
 
                   <div className="auth-divider" />
-                  <form className="auth-form recovery-form" onSubmit={onRequestPasswordReset}>
+                  <form
+                    className="auth-form recovery-form"
+                    onSubmit={onRequestPasswordReset}
+                  >
                     <input
                       type="email"
                       placeholder="Email para recuperar senha"
                       value={recoveryEmail}
-                      onChange={(event) => onRecoveryEmailChange(event.target.value)}
+                      onChange={(event) =>
+                        onRecoveryEmailChange(event.target.value)
+                      }
                     />
-                    <button className="secondary-button compact-button" type="submit" disabled={isRequestingPasswordReset}>
-                      {isRequestingPasswordReset ? "Enviando..." : "Enviar link"}
+                    <button
+                      className="secondary-button compact-button"
+                      type="submit"
+                      disabled={isRequestingPasswordReset}
+                    >
+                      {isRequestingPasswordReset
+                        ? "Enviando..."
+                        : "Enviar link"}
                     </button>
-                    {passwordResetFeedback ? <small>{passwordResetFeedback}</small> : null}
+                    {passwordResetFeedback ? (
+                      <small>{passwordResetFeedback}</small>
+                    ) : null}
                   </form>
                 </>
               )}

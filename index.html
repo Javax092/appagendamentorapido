@@ -24,57 +24,72 @@
 
     <!-- ALTERACAO: pacote completo de SEO social e Open Graph. -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="O Pai Ta On | Agenda premium para barbearia" />
+    <meta
+      property="og:title"
+      content="O Pai Ta On | Agenda premium para barbearia"
+    />
     <meta
       property="og:description"
       content="Agendamento premium com jornada mobile-first, painel do barbeiro, CRM e operacao via Supabase."
     />
-    <meta property="og:image" content="https://appmobilebarbearia.vercel.app/paitaon.png" />
+    <meta
+      property="og:image"
+      content="https://appmobilebarbearia.vercel.app/paitaon.png"
+    />
     <meta property="og:image:alt" content="Identidade visual O Pai Ta On" />
     <meta property="og:url" content="https://appmobilebarbearia.vercel.app/" />
     <meta property="og:site_name" content="O Pai Ta On" />
     <meta property="og:locale" content="pt_BR" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="O Pai Ta On | Agenda premium para barbearia" />
+    <meta
+      name="twitter:title"
+      content="O Pai Ta On | Agenda premium para barbearia"
+    />
     <meta
       name="twitter:description"
       content="PWA de agendamento para barbearia com visual premium, operacao mobile e CRM."
     />
-    <meta name="twitter:image" content="https://appmobilebarbearia.vercel.app/paitaon.png" />
+    <meta
+      name="twitter:image"
+      content="https://appmobilebarbearia.vercel.app/paitaon.png"
+    />
 
     <!-- ALTERACAO: canonical, app icons e instalacao mobile. -->
     <link rel="canonical" href="https://appmobilebarbearia.vercel.app/" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="//ambiente.jpeg" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="O Pai Ta On" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <link rel="apple-touch-icon" sizes="180x180" href="/paitaon.png" />
     <link
       rel="apple-touch-startup-image"
-      href="/paion2.png"
+      href="/ash.jpeg"
       media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)"
     />
     <link
       rel="apple-touch-startup-image"
-      href="/paion2.png"
+      href="/degrade.jpeg"
       media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)"
     />
     <link
       rel="apple-touch-startup-image"
-      href="/paion2.png"
+      href="/moicano.jpeg"
       media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)"
     />
     <link
       rel="apple-touch-startup-image"
-      href="/paion2.png"
+      href="/barba.jpeg"
       media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
     />
 
     <meta name="msapplication-TileColor" content="#120D09" />
-    <meta name="msapplication-TileImage" content="/paitaon.png" />
+    <meta name="msapplication-TileImage" content="/ambiente.jpeg" />
 
     <!-- ALTERACAO: preconnect, dns-prefetch e preload dos recursos criticos. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -98,7 +113,9 @@
       (() => {
         const storageKey = "appmobilebarbearia.theme-mode";
         const root = document.documentElement;
-        const systemPrefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+        const systemPrefersLight = window.matchMedia(
+          "(prefers-color-scheme: light)",
+        ).matches;
         const stored = localStorage.getItem(storageKey);
         const theme = stored || (systemPrefersLight ? "light" : "dark");
         root.dataset.theme = theme;
@@ -121,7 +138,14 @@
         "openingHoursSpecification": [
           {
             "@type": "OpeningHoursSpecification",
-            "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+            "dayOfWeek": [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday"
+            ],
             "opens": "09:00",
             "closes": "21:00"
           }
@@ -140,31 +164,56 @@
           place-items: center;
           padding: 32px;
           background:
-            radial-gradient(circle at top, rgba(198,145,55,.16), transparent 36%),
-            #120D09;
-          color: #F6EFE7;
-          font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+            radial-gradient(
+              circle at top,
+              rgba(198, 145, 55, 0.16),
+              transparent 36%
+            ),
+            #120d09;
+          color: #f6efe7;
+          font-family: &quot;Plus Jakarta Sans&quot;, system-ui, sans-serif;
         "
       >
         <div
           style="
             max-width: 28rem;
-            border: 1px solid rgba(255,231,198,.14);
+            border: 1px solid rgba(255, 231, 198, 0.14);
             border-radius: 28px;
             padding: 28px;
-            background: rgba(28,20,14,.88);
-            box-shadow: 0 24px 72px rgba(0,0,0,.35);
+            background: rgba(28, 20, 14, 0.88);
+            box-shadow: 0 24px 72px rgba(0, 0, 0, 0.35);
           "
         >
-          <p style="margin: 0 0 8px; letter-spacing: .18em; text-transform: uppercase; color: #C69137; font-size: .75rem;">
+          <p
+            style="
+              margin: 0 0 8px;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              color: #c69137;
+              font-size: 0.75rem;
+            "
+          >
             Experiencia Premium
           </p>
-          <h1 style="margin: 0 0 12px; font-family: 'Cormorant Garamond', serif; font-size: 2.5rem; line-height: .95;">
+          <h1
+            style="
+              margin: 0 0 12px;
+              font-family: &quot;Cormorant Garamond&quot;, serif;
+              font-size: 2.5rem;
+              line-height: 0.95;
+            "
+          >
             Ative o JavaScript para abrir o O Pai Ta On.
           </h1>
-          <p style="margin: 0; color: rgba(246,239,231,.76); line-height: 1.7;">
-            O app usa recursos de PWA, agenda em tempo real e integracao com Supabase para carregar horarios,
-            servicos e operacao do barbeiro.
+          <p
+            style="
+              margin: 0;
+              color: rgba(246, 239, 231, 0.76);
+              line-height: 1.7;
+            "
+          >
+            O app usa recursos de PWA, agenda em tempo real e integracao com
+            Supabase para carregar horarios, servicos e operacao do barbeiro.
           </p>
         </div>
       </section>
