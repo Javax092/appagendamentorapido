@@ -296,6 +296,13 @@ function App() {
   }, [activeView, admin.tabs]);
 
   useEffect(() => {
+    // ALTERACAO: cliente sem sessao fica restrito a jornada publica de agendamento.
+    if (!session?.role && activeView !== "booking") {
+      setActiveView("booking");
+    }
+  }, [activeView, session]);
+
+  useEffect(() => {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(THEME_STORAGE_KEY, themeMode);
     }
@@ -462,7 +469,7 @@ function App() {
       </div>
 
       <GalleryStrip galleryPosts={galleryPosts} />
-      <TabBar tabs={admin.tabs} activeView={activeView} onChange={setActiveView} />
+      {session?.role ? <TabBar tabs={admin.tabs} activeView={activeView} onChange={setActiveView} /> : null}
 
       <AnimatePresence mode="wait">
         <motion.div
