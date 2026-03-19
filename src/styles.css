@@ -49,6 +49,18 @@ body {
   color: var(--text);
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6, 4, 2, 0.76), rgba(6, 4, 2, 0.88)),
+    url("/ambiente.jpeg") center / cover no-repeat;
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: -2;
+}
+
 button,
 input,
 textarea,
@@ -268,6 +280,10 @@ a {
   margin-top: 22px;
 }
 
+.gallery-switch {
+  margin-bottom: 18px;
+}
+
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -298,6 +314,59 @@ a {
 .gallery-copy p {
   margin: 0;
   color: var(--muted);
+}
+
+.lookbook-card {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  overflow: hidden;
+  border-radius: 32px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(198, 145, 55, 0.14), transparent 46%),
+    var(--panel-strong);
+}
+
+.lookbook-visual img {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  display: block;
+  object-fit: cover;
+}
+
+.lookbook-copy {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: 34px;
+}
+
+.lookbook-copy h3 {
+  margin: 0;
+  font-family: "Cormorant Garamond", serif;
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+}
+
+.lookbook-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.lookbook-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lookbook-specs span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 244, 227, 0.04);
 }
 
 .stat-card,
@@ -453,6 +522,37 @@ a {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
   gap: 20px;
+}
+
+.view-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 34px;
+}
+
+.view-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.view-stage > * {
+  position: relative;
+  z-index: 1;
+}
+
+.booking-stage::before {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 3, 0.7), rgba(8, 6, 3, 0.84)),
+    url("/AGENDE SEU HORÁRIO - ALFA BARBEARIA.jpeg") center 18% / cover no-repeat;
+}
+
+.ambient-stage::before {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 3, 0.78), rgba(8, 6, 3, 0.88)),
+    url("/ambiente.jpeg") center / cover no-repeat;
 }
 
 .layout-grid.single-column,
@@ -1341,6 +1441,9 @@ a {
   min-height: calc(100dvh - 220px);
   display: grid;
   overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 3, 0.62), rgba(8, 6, 3, 0.88)),
+    url("/AGENDE SEU HORÁRIO - ALFA BARBEARIA.jpeg") center / cover no-repeat;
 }
 
 .booking-progress-sticky {
@@ -1622,6 +1725,15 @@ a {
   .booking-wizard-card {
     min-height: calc(100dvh - 154px);
     padding-bottom: 90px;
+  }
+
+  .gallery-grid,
+  .lookbook-card {
+    grid-template-columns: 1fr;
+  }
+
+  .lookbook-visual img {
+    min-height: 320px;
   }
 
   .booking-step-content {

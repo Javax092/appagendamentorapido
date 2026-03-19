@@ -366,6 +366,7 @@ function App() {
       onNotesChange: booking.setNotes,
       onConfirmBooking: booking.handleConfirmBooking,
       onResetBooking: () => booking.resetBookingForm(setActiveView),
+      onBookingConfirmed: () => booking.resetBookingForm(setActiveView),
       isSaving: booking.isSaving,
       isLoading,
       selectedBarber: booking.selectedBarber,
@@ -389,7 +390,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell view-${activeView}`}>
       <AppHeader
         selectedBarber={booking.selectedBarber}
         session={session}
@@ -430,6 +431,7 @@ function App() {
       <AnimatePresence mode="wait">
         <motion.div
           key={activeView}
+          className={`view-stage ${activeView === "booking" ? "booking-stage" : "ambient-stage"}`}
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -18 }}

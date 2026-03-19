@@ -47,7 +47,10 @@ export function AppHeader({
             <h1>{brandConfig.logoText}</h1>
           </div>
         </div>
-        <p>{brandConfig.heroDescription || "Agendamento rapido, equipe organizada e atendimento direto no WhatsApp."}</p>
+        <p>
+          {brandConfig.heroDescription ||
+            "Barbearia com imagem forte, atendimento preciso e agendamento direto para uma experiencia premium."}
+        </p>
         <div className="brand-inline hero-meta">
           <strong>Contato</strong>
           <span>{brandConfig.businessWhatsapp}</span>
@@ -76,11 +79,11 @@ export function AppHeader({
               alt="Corte em destaque"
             />
             <div>
-              <strong>{selectedBarber?.name || "Atendimento premium"}</strong>
-              <p>{selectedBarber?.heroTagline || "Corte, acabamento e atendimento profissional."}</p>
+              <strong>{selectedBarber?.name || "Atendimento de assinatura"}</strong>
+              <p>{selectedBarber?.heroTagline || "Corte, barba e acabamento com leitura profissional em cada detalhe."}</p>
             </div>
           </div>
-          <small>Reserva online com confirmacao rapida.</small>
+          <small>Reserva online com apresentacao premium e confirmacao rapida.</small>
         </div>
       </div>
 

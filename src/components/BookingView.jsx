@@ -81,6 +81,7 @@ export function BookingView({
   onNotesChange,
   onConfirmBooking,
   onResetBooking,
+  onBookingConfirmed,
   isSaving,
   isLoading,
   selectedBarber,
@@ -119,11 +120,18 @@ export function BookingView({
     }
   }
 
+  function handleReset() {
+    setDirection(-1);
+    setCurrentStep(0);
+    onResetBooking();
+  }
+
   async function handleConfirm() {
     const result = await onConfirmBooking();
     if (result?.ok) {
-      setDirection(1);
-      setCurrentStep(3);
+      setDirection(-1);
+      setCurrentStep(0);
+      onBookingConfirmed?.();
     }
   }
 
@@ -137,7 +145,7 @@ export function BookingView({
             <div className="booking-step-content">
               <div className="booking-step-head">
                 <span className="mini-badge">Passo 1</span>
-                <h2>Escolha o profissional</h2>
+                <h2>Escolha seu barbeiro</h2>
                 <p>{bookingStatusMessage}</p>
               </div>
 
@@ -157,11 +165,11 @@ export function BookingView({
               </div>
 
               <div className="booking-step-actions">
-                <button className="secondary-button" onClick={onResetBooking} type="button">
-                  Limpar
+                <button className="secondary-button" onClick={handleReset} type="button">
+                  Reiniciar
                 </button>
                 <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[0]}>
-                  Proximo
+                  Avancar
                 </button>
               </div>
             </div>
@@ -171,8 +179,8 @@ export function BookingView({
             <div className="booking-step-content">
               <div className="booking-step-head">
                 <span className="mini-badge">Passo 2</span>
-                <h2>Selecione os servicos</h2>
-                <p>Monte seu atendimento com selecao multipla.</p>
+                <h2>Monte seu atendimento</h2>
+                <p>Escolha os servicos que melhor constroem o seu visual.</p>
               </div>
 
               <div className="booking-services-pills">
@@ -203,7 +211,7 @@ export function BookingView({
                     Voltar
                   </button>
                   <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[1]}>
-                    Proximo
+                    Avancar
                   </button>
                 </div>
               </div>
@@ -214,8 +222,8 @@ export function BookingView({
             <div className="booking-step-content">
               <div className="booking-step-head">
                 <span className="mini-badge">Passo 3</span>
-                <h2>Escolha data e horario</h2>
-                <p>Slots com leitura visual de disponibilidade.</p>
+                <h2>Defina o melhor horario</h2>
+                <p>Selecione a data e reserve o encaixe ideal para o seu atendimento.</p>
               </div>
 
               <div className="day-row booking-day-row">
@@ -278,7 +286,7 @@ export function BookingView({
                   Voltar
                 </button>
                 <button className="primary-button" onClick={handleAdvance} type="button" disabled={!canAdvance[2]}>
-                  Proximo
+                  Avancar
                 </button>
               </div>
             </div>
@@ -288,7 +296,7 @@ export function BookingView({
             <div className="booking-step-content">
               <div className="booking-step-head">
                 <span className="mini-badge">Passo 4</span>
-                <h2>Confirme seus dados</h2>
+                <h2>Feche sua reserva</h2>
                 <p>{bookingMomentLabel}</p>
               </div>
 
@@ -316,7 +324,7 @@ export function BookingView({
                   />
                 </label>
                 <label className="full">
-                  Observacao
+                  Observacoes do atendimento
                   <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} />
                 </label>
               </div>
@@ -357,7 +365,7 @@ export function BookingView({
                   type="button"
                   disabled={!isBookingReady || isSaving || isLoading}
                 >
-                  {isSaving ? "Salvando..." : "Confirmar"}
+                  {isSaving ? "Salvando..." : "Confirmar reserva"}
                 </button>
               </div>
             </div>
