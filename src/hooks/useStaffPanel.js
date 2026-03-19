@@ -3,13 +3,23 @@ import {
   deleteService,
   saveService,
   saveStaffAppointment,
-  setServiceActive,
-  updateAppointmentStatus
+  setServiceActive
 } from "../lib/api";
 import { generateTimeSlots, getServiceTotals, groupAppointmentsByBarber } from "../utils/schedule";
 
-export function useStaffPanel({ barbers, services, appointments, scheduleBlocks, session, refreshData }) {
+function getTodayDate() {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
+}
+
+function getNormalizedStatus(status) {
+  return status === "completed" ? "done" : status;
+}
+
+export function useStaffPanel({ barbers, services, appointmentsApi, scheduleBlocks, session, refreshData, showToast }) {
   const [selectedPanelBarberId, setSelectedPanelBarberId] = useState("");
+  const [panelDateFilter, setPanelDateFilter] = useState(getTodayDate());
   const [statusUpdateId, setStatusUpdateId] = useState("");
   const [editorForm, setEditorForm] = useState(null);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
@@ -78,20 +88,35 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
     });
   }, [managedBarberId, session]);
 
-  const appointmentsByBarber = useMemo(() => groupAppointmentsByBarber(appointments), [appointments]);
+  // ALTERACAO: painel passa a consumir appointments do hook compartilhado.
+  const appointmentsByBarber = useMemo(
+    () => groupAppointmentsByBarber(appointmentsApi.appointments),
+    [appointmentsApi.appointments]
+  );
 
   const panelAppointments = useMemo(() => {
     const scopeBarberId = session?.role === "barber" ? session.barberId : selectedPanelBarberId;
     const scopedAppointments = appointmentsByBarber[scopeBarberId] ?? [];
 
-    return scopedAppointments.slice().sort((left, right) => {
-      if (left.date !== right.date) {
-        return left.date.localeCompare(right.date);
-      }
+    return scopedAppointments
+      .map((appointment) => ({
+        ...appointment,
+        status: getNormalizedStatus(appointment.status)
+      }))
+      .slice()
+      .sort((left, right) => {
+        if (left.date !== right.date) {
+          return left.date.localeCompare(right.date);
+        }
 
-      return left.startTime.localeCompare(right.startTime);
-    });
+        return left.startTime.localeCompare(right.startTime);
+      });
   }, [appointmentsByBarber, selectedPanelBarberId, session]);
+
+  const filteredPanelAppointments = useMemo(
+    () => panelAppointments.filter((appointment) => !panelDateFilter || appointment.date === panelDateFilter),
+    [panelAppointments, panelDateFilter]
+  );
 
   const editorBarber = useMemo(
     () => barbers.find((barber) => barber.id === editorForm?.barberId) ?? null,
@@ -133,11 +158,11 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
       barber: editorBarber,
       date: editorForm.date,
       totalDuration: editorTotals.totalDuration,
-      appointments,
+      appointments: appointmentsApi.appointments,
       scheduleBlocks,
       ignoreAppointmentId: editorForm.id
     });
-  }, [appointments, editorBarber, editorForm, editorServices.length, editorTotals.totalDuration, scheduleBlocks]);
+  }, [appointmentsApi.appointments, editorBarber, editorForm, editorServices.length, editorTotals.totalDuration, scheduleBlocks]);
 
   function beginEditAppointment(appointment) {
     setEditorForm({
@@ -166,11 +191,29 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
     setStatusUpdateId(appointmentId);
 
     try {
-      await updateAppointmentStatus(appointmentId, nextStatus, session);
+      if (nextStatus === "cancelled") {
+        await appointmentsApi.cancelAppointment(appointmentId);
+      } else {
+        await appointmentsApi.updateStatus(appointmentId, nextStatus);
+      }
       await refreshData(session);
       setEditorForm((current) =>
         current && current.id === appointmentId ? { ...current, status: nextStatus } : current
       );
+      showToast?.({
+        type: nextStatus === "cancelled" ? "info" : "success",
+        title: nextStatus === "cancelled" ? "Agendamento cancelado" : "Status atualizado",
+        message:
+          nextStatus === "cancelled"
+            ? "O horario foi liberado automaticamente na agenda."
+            : "O andamento do atendimento foi atualizado."
+      });
+    } catch (error) {
+      showToast?.({
+        type: "error",
+        title: "Falha ao atualizar",
+        message: error.message || "Nao foi possivel atualizar o status do agendamento."
+      });
     } finally {
       setStatusUpdateId("");
     }
@@ -178,7 +221,11 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
 
   async function handleSaveAppointmentEdits() {
     if (!editorForm || !editorBarber || !editorForm.startTime || !editorForm.serviceIds.length) {
-      window.alert("Revise profissional, servicos e horario antes de salvar.");
+      showToast?.({
+        type: "error",
+        title: "Edicao incompleta",
+        message: "Revise profissional, servicos e horario antes de salvar."
+      });
       return;
     }
 
@@ -186,8 +233,20 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
 
     try {
       await saveStaffAppointment(editorForm);
+      await appointmentsApi.reload();
       await refreshData(session);
       setEditorForm(null);
+      showToast?.({
+        type: "success",
+        title: "Agendamento atualizado",
+        message: "As alteracoes foram salvas com sucesso."
+      });
+    } catch (error) {
+      showToast?.({
+        type: "error",
+        title: "Falha ao salvar",
+        message: error.message || "Nao foi possivel salvar as alteracoes do agendamento."
+      });
     } finally {
       setIsUpdatingAppointment(false);
     }
@@ -264,10 +323,12 @@ export function useStaffPanel({ barbers, services, appointments, scheduleBlocks,
   return {
     selectedPanelBarberId,
     setSelectedPanelBarberId,
+    panelDateFilter,
+    setPanelDateFilter,
     selectedPanelBarber,
     managedBarberId,
     managedServices,
-    panelAppointments,
+    panelAppointments: filteredPanelAppointments,
     statusUpdateId,
     editorForm,
     setEditorForm,

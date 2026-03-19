@@ -183,7 +183,7 @@ export function buildOccupancyHeatmap(barbers, appointments, scheduleBlocks, dat
 
 export function buildRevenueProjection(appointments, today) {
   const completedRevenue = appointments
-    .filter((appointment) => appointment.status === "completed")
+    .filter((appointment) => appointment.status === "done" || appointment.status === "completed")
     .reduce((sum, appointment) => sum + appointment.totalPrice, 0);
   const confirmedRevenue = appointments
     .filter((appointment) => appointment.status === "confirmed")

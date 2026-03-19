@@ -186,11 +186,13 @@ export function createDateOptions(total = 10) {
 
 export function buildWhatsAppLink(phone, message) {
   const digits = phone.replace(/\D/g, "");
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  const normalizedDigits = digits.length <= 11 ? `55${digits}` : digits;
+  return `https://wa.me/${normalizedDigits}?text=${encodeURIComponent(message)}`;
 }
 
 export function normalizeWhatsapp(value) {
-  const digits = value.replace(/\D/g, "").slice(0, 13);
+  // ALTERACAO: mascara em tempo real no formato (XX) XXXXX-XXXX sem biblioteca externa.
+  const digits = value.replace(/\D/g, "").slice(0, 11);
 
   if (!digits) {
     return "";
@@ -204,16 +206,12 @@ export function normalizeWhatsapp(value) {
     return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   }
 
-  if (digits.length <= 11) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-  }
-
-  return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 export function isValidWhatsapp(value) {
   const digits = value.replace(/\D/g, "");
-  return digits.length >= 10 && digits.length <= 13;
+  return digits.length === 11;
 }
 
 export function buildBookingCode(barberCode, date, count) {

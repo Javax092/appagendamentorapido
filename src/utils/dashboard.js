@@ -82,7 +82,7 @@ export function calculateAdminStats(appointments, barbers, today) {
     total: appointments.length,
     confirmed: appointments.filter((appointment) => appointment.status === "confirmed").length,
     cancelled: appointments.filter((appointment) => appointment.status === "cancelled").length,
-    completed: appointments.filter((appointment) => appointment.status === "completed").length,
+    completed: appointments.filter((appointment) => appointment.status === "done" || appointment.status === "completed").length,
     today: todayAppointments.length,
     grossRevenue,
     todayRevenue,

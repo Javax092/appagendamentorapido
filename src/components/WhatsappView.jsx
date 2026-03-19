@@ -1,5 +1,13 @@
 const brandLogo = "/paitaon.png";
 
+const STATUS_LABELS = {
+  confirmed: "Confirmado",
+  "in-progress": "Em andamento",
+  done: "Concluido",
+  cancelled: "Cancelado",
+  completed: "Concluido"
+};
+
 export function WhatsappView({ visibleWhatsappAppointments, hydrateAppointmentView }) {
   return (
     <section className="layout-grid single-column">
@@ -23,7 +31,7 @@ export function WhatsappView({ visibleWhatsappAppointments, hydrateAppointmentVi
                   <img className="whatsapp-brand-image" src={brandLogo} alt="Logo da barbearia" />
                   <h3>{appointment.clientName}</h3>
                   <p>{hydrated.barber?.name || "Sem profissional"}</p>
-                  <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
+                  <span className={`status-pill ${appointment.status}`}>{STATUS_LABELS[appointment.status] ?? appointment.status}</span>
                 </div>
                 <div className="actions-stack">
                   <a className="primary-button" href={hydrated.clientWhatsappLink} target="_blank" rel="noreferrer">

@@ -3,6 +3,14 @@ import { formatCurrency, formatLongDate } from "../utils/schedule";
 const showcaseImage = "/paion2.png";
 const brandLogo = "/paitaon.png";
 
+const STATUS_META = {
+  confirmed: { label: "Confirmado", actionLabel: "Iniciar atendimento", nextStatus: "in-progress" },
+  "in-progress": { label: "Em andamento", actionLabel: "Marcar como concluido", nextStatus: "done" },
+  done: { label: "Concluido", actionLabel: "", nextStatus: "" },
+  cancelled: { label: "Cancelado", actionLabel: "", nextStatus: "" },
+  completed: { label: "Concluido", actionLabel: "", nextStatus: "" }
+};
+
 export function PanelView({
   session,
   barbers,
@@ -21,22 +29,17 @@ export function PanelView({
   onBeginCreateService,
   serviceFeedback,
   panelAppointments,
+  panelDateFilter,
+  onPanelDateFilterChange,
   hydrateAppointmentView,
   onStatusChange,
   statusUpdateId,
   getAppointmentServiceList
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const upcomingAppointments = panelAppointments.filter((appointment) => {
-    const appointmentDate = new Date(`${appointment.date}T12:00:00`);
-    return appointmentDate >= today;
-  });
-
-  const agendaAppointments = upcomingAppointments.length ? upcomingAppointments : panelAppointments;
+  const agendaAppointments = panelAppointments;
   const confirmedCount = agendaAppointments.filter((appointment) => appointment.status === "confirmed").length;
-  const completedCount = agendaAppointments.filter((appointment) => appointment.status === "completed").length;
+  const inProgressCount = agendaAppointments.filter((appointment) => appointment.status === "in-progress").length;
+  const doneCount = agendaAppointments.filter((appointment) => appointment.status === "done").length;
   const cancelledCount = agendaAppointments.filter((appointment) => appointment.status === "cancelled").length;
   const isBarber = session?.role === "barber";
   const isAdmin = session?.role === "admin";
@@ -248,6 +251,13 @@ export function PanelView({
           </p>
         </div>
 
+        <div className="panel-filter-row">
+          <label>
+            Data
+            <input type="date" value={panelDateFilter} onChange={(event) => onPanelDateFilterChange(event.target.value)} />
+          </label>
+        </div>
+
         <div className="admin-stats panel-stats">
           <div className="metric-card">
             <strong>{agendaAppointments.length}</strong>
@@ -258,7 +268,11 @@ export function PanelView({
             <span>confirmados</span>
           </div>
           <div className="metric-card">
-            <strong>{completedCount}</strong>
+            <strong>{inProgressCount}</strong>
+            <span>em andamento</span>
+          </div>
+          <div className="metric-card">
+            <strong>{doneCount}</strong>
             <span>concluidos</span>
           </div>
           <div className="metric-card">
@@ -271,13 +285,15 @@ export function PanelView({
           {agendaAppointments.map((appointment) => {
             const bookedServices = getAppointmentServiceList(appointment);
             const hydrated = hydrateAppointmentView(appointment);
+            const statusMeta = STATUS_META[appointment.status] ?? STATUS_META.confirmed;
+            const canAdvance = Boolean(statusMeta.nextStatus) && appointment.status !== "cancelled";
 
             return (
               <article key={appointment.id} className="agenda-card">
                 <div className="agenda-main">
                   <div className="agenda-topline">
                     <span className="tag">{appointment.id}</span>
-                    <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
+                    <span className={`status-pill ${appointment.status}`}>{statusMeta.label}</span>
                   </div>
                   <img className="agenda-inline-image" src={brandLogo} alt="Logo da barbearia" />
                   <h3>{appointment.clientName}</h3>
@@ -309,17 +325,21 @@ export function PanelView({
                     <button
                       className="secondary-button compact-button"
                       type="button"
-                      disabled={statusUpdateId === appointment.id || appointment.status === "completed"}
-                      onClick={() => onStatusChange(appointment.id, "completed")}
+                      disabled={statusUpdateId === appointment.id || !canAdvance}
+                      onClick={() => onStatusChange(appointment.id, statusMeta.nextStatus)}
                     >
-                      {statusUpdateId === appointment.id && appointment.status !== "completed"
+                      {statusUpdateId === appointment.id && canAdvance
                         ? "Atualizando..."
-                        : "Marcar concluido"}
+                        : statusMeta.actionLabel || "Sem acao"}
                     </button>
                     <button
                       className="secondary-button compact-button danger-button"
                       type="button"
-                      disabled={statusUpdateId === appointment.id || appointment.status === "cancelled"}
+                      disabled={
+                        statusUpdateId === appointment.id ||
+                        appointment.status === "cancelled" ||
+                        appointment.status === "done"
+                      }
                       onClick={() => onStatusChange(appointment.id, "cancelled")}
                     >
                       {statusUpdateId === appointment.id && appointment.status !== "cancelled"

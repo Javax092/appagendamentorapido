@@ -79,6 +79,7 @@ export function BookingView({
   onClientWhatsappChange,
   notes,
   onNotesChange,
+  fieldErrors,
   onConfirmBooking,
   onResetBooking,
   onBookingConfirmed,
@@ -163,6 +164,7 @@ export function BookingView({
                   </button>
                 ))}
               </div>
+              {fieldErrors.selectedBarberId ? <p className="field-error">{fieldErrors.selectedBarberId}</p> : null}
 
               <div className="booking-step-actions">
                 <button className="secondary-button" onClick={handleReset} type="button">
@@ -200,6 +202,7 @@ export function BookingView({
                   );
                 })}
               </div>
+              {fieldErrors.selectedServiceIds ? <p className="field-error">{fieldErrors.selectedServiceIds}</p> : null}
 
               <div className="booking-step-footer">
                 <div className="booking-inline-total">
@@ -274,6 +277,7 @@ export function BookingView({
                   </div>
                 </div>
               </div>
+              {fieldErrors.selectedTime ? <p className="field-error">{fieldErrors.selectedTime}</p> : null}
 
               <div className="heatmap-legend booking-legend-tight">
                 <span><i className="heat-dot heat-easy" /> Facil</span>
@@ -311,6 +315,7 @@ export function BookingView({
                 <label>
                   Nome
                   <input value={clientName} onChange={(event) => onClientNameChange(event.target.value)} />
+                  {fieldErrors.clientName ? <span className="field-error">{fieldErrors.clientName}</span> : null}
                 </label>
                 <label>
                   WhatsApp
@@ -322,6 +327,9 @@ export function BookingView({
                     value={clientWhatsapp}
                     onChange={(event) => onClientWhatsappChange(event.target.value)}
                   />
+                  {fieldErrors.clientWhatsapp ? (
+                    <span className="field-error">{fieldErrors.clientWhatsapp}</span>
+                  ) : null}
                 </label>
                 <label className="full">
                   Observacoes do atendimento
@@ -363,7 +371,7 @@ export function BookingView({
                   className="primary-button"
                   onClick={handleConfirm}
                   type="button"
-                  disabled={!isBookingReady || isSaving || isLoading}
+                  disabled={isSaving || isLoading}
                 >
                   {isSaving ? "Salvando..." : "Confirmar reserva"}
                 </button>

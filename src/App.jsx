@@ -4,11 +4,16 @@ import { AppHeader } from "./components/AppHeader";
 import { BookingView } from "./components/BookingView";
 import { GalleryStrip } from "./components/GalleryStrip";
 import { TabBar } from "./components/TabBar";
+import { Toast } from "./components/Toast";
 import { bootstrapAppData, getCurrentSessionProfile, logAppEvent } from "./lib/api";
 import { dateOptions, emptyBrandConfig } from "./app/constants";
 import { isSupabaseConfigured, subscribeToRealtimeTables } from "./lib/supabase";
 import { buildWhatsAppLink } from "./utils/schedule";
+import { buildBarberWhatsAppMessage, buildClientWhatsAppMessage } from "./utils/whatsapp";
+import { useAppointments } from "./hooks/useAppointments";
+import { useBarbers } from "./hooks/useBarbers";
 import { useBooking } from "./hooks/useBooking";
+import { useServices } from "./hooks/useServices";
 import { useStaffPanel } from "./hooks/useStaffPanel";
 import { useAdminDashboard } from "./hooks/useAdminDashboard";
 import { useAuthControls } from "./hooks/useAuthControls";
@@ -92,10 +97,6 @@ function getAppointmentServiceList(appointment, services) {
 }
 
 function App() {
-  const [barbers, setBarbers] = useState([]);
-  const [services, setServices] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [bookingEvents, setBookingEvents] = useState([]);
   const [scheduleBlocks, setScheduleBlocks] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -118,6 +119,35 @@ function App() {
   const [liveEvents, setLiveEvents] = useState(0);
   const [lastRealtimeSyncAt, setLastRealtimeSyncAt] = useState(null);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [toast, setToast] = useState(null);
+  const barbersApi = useBarbers();
+  const servicesApi = useServices();
+  const appointmentsApi = useAppointments();
+  const { barbers, loading: isLoadingBarbers, reload: reloadBarbers } = barbersApi;
+  const { services, loading: isLoadingServices, reload: reloadServices } = servicesApi;
+  const { appointments, loading: isLoadingAppointments, reload: reloadAppointments } = appointmentsApi;
+
+  // ALTERACAO: camada central de notificacao efemera para todo o app.
+  const showToast = useCallback(({ type = "info", title, message }) => {
+    setToast({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      title,
+      message
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   const refreshData = useCallback(async (sessionProfileOverride) => {
     setIsLoading(true);
@@ -128,10 +158,6 @@ function App() {
         sessionProfileOverride === undefined ? await getCurrentSessionProfile() : sessionProfileOverride;
       const data = await bootstrapAppData(resolvedSession);
       setSession(resolvedSession);
-      setBarbers(data.barbers);
-      setServices(data.services);
-      setAppointments(data.appointments);
-      setBookingEvents(data.bookingEvents);
       setScheduleBlocks(data.scheduleBlocks);
       setCustomers(data.customers);
       setNotifications(data.notifications);
@@ -172,27 +198,21 @@ function App() {
         clientWhatsappLink: barber
           ? buildWhatsAppLink(
               baseAppointment.clientWhatsapp,
-              [
-                "Seu atendimento foi confirmado.",
-                `Profissional: ${barber.name}`,
-                `Data: ${new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${baseAppointment.date}T12:00:00`))}`,
-                `Horario: ${baseAppointment.startTime}`,
-                `Servicos: ${appointmentServices.map((service) => service.name).join(", ")}`,
-                `WhatsApp da barbearia: ${brandConfig.businessWhatsapp}`
-              ].join("\n")
+              buildClientWhatsAppMessage({
+                appointment: baseAppointment,
+                barber,
+                services: appointmentServices,
+                businessWhatsapp: brandConfig.businessWhatsapp
+              })
             )
           : "#",
         barberWhatsappLink: barber
           ? buildWhatsAppLink(
               barber.phone,
-              [
-                "Atualizacao da agenda.",
-                `Cliente: ${baseAppointment.clientName}`,
-                `Data: ${baseAppointment.date}`,
-                `Horario: ${baseAppointment.startTime} ate ${baseAppointment.endTime}`,
-                `Servicos: ${appointmentServices.map((service) => service.name).join(", ")}`,
-                `Observacoes: ${baseAppointment.notes || "Sem observacoes"}`
-              ].join("\n")
+              buildBarberWhatsAppMessage({
+                appointment: baseAppointment,
+                services: appointmentServices
+              })
             )
           : "#",
         rescheduleWhatsappLink: buildWhatsAppLink(
@@ -225,21 +245,22 @@ function App() {
   const staffPanel = useStaffPanel({
     barbers,
     services,
-    appointments,
+    appointmentsApi,
     scheduleBlocks,
     session,
-    refreshData
+    refreshData,
+    showToast
   });
 
   const booking = useBooking({
     barbers,
     services,
-    appointments,
-    bookingEvents,
+    appointmentsApi,
     scheduleBlocks,
     session,
     refreshData,
-    hydrateAppointmentView
+    hydrateAppointmentView,
+    showToast
   });
 
   const admin = useAdminDashboard({
@@ -320,6 +341,7 @@ function App() {
 
     const syncLiveData = async () => {
       await refreshData(session);
+      await Promise.all([reloadAppointments(), reloadBarbers(), reloadServices()]);
       setLiveEvents((current) => current + 1);
       setLastRealtimeSyncAt(new Date());
     };
@@ -328,7 +350,7 @@ function App() {
       ["appointments", "schedule_blocks", "appointment_notifications", "customers"],
       syncLiveData
     );
-  }, [refreshData, session]);
+  }, [refreshData, reloadAppointments, reloadBarbers, reloadServices, session]);
 
   const bookingViewProps = useMemo(
     () => ({
@@ -337,11 +359,13 @@ function App() {
       onSelectBarber: (barberId) => {
         booking.setSelectedBarberId(barberId);
         booking.setSelectedTime("");
+        booking.clearFieldError("selectedBarberId");
       },
       bookingServices: booking.bookingServices,
       selectedServiceIds: booking.selectedServiceIds,
       onToggleService: (serviceId) => {
         booking.setSelectedTime("");
+        booking.clearFieldError("selectedServiceIds");
         booking.setSelectedServiceIds((current) =>
           current.includes(serviceId)
             ? current.filter((id) => id !== serviceId)
@@ -357,18 +381,28 @@ function App() {
       availableSlots: booking.availableSlots,
       recommendedSlots: booking.recommendedSlots,
       selectedTime: booking.selectedTime,
-      onSelectTime: booking.setSelectedTime,
+      onSelectTime: (value) => {
+        booking.setSelectedTime(value);
+        booking.clearFieldError("selectedTime");
+      },
       clientName: booking.clientName,
-      onClientNameChange: booking.setClientName,
+      onClientNameChange: (value) => {
+        booking.setClientName(value);
+        booking.clearFieldError("clientName");
+      },
       clientWhatsapp: booking.clientWhatsapp,
-      onClientWhatsappChange: (value) => booking.setClientWhatsapp(booking.normalizeBookingWhatsapp(value)),
+      onClientWhatsappChange: (value) => {
+        booking.setClientWhatsapp(booking.normalizeBookingWhatsapp(value));
+        booking.clearFieldError("clientWhatsapp");
+      },
       notes: booking.notes,
       onNotesChange: booking.setNotes,
+      fieldErrors: booking.fieldErrors,
       onConfirmBooking: booking.handleConfirmBooking,
       onResetBooking: () => booking.resetBookingForm(setActiveView),
       onBookingConfirmed: () => booking.resetBookingForm(setActiveView),
       isSaving: booking.isSaving,
-      isLoading,
+      isLoading: isLoading || isLoadingAppointments,
       selectedBarber: booking.selectedBarber,
       summaryServices: booking.summaryServices,
       totals: booking.totals,
@@ -378,10 +412,12 @@ function App() {
       bookingMomentLabel: booking.bookingMomentLabel,
       isBookingReady: booking.isBookingReady
     }),
-    [barbers, booking, isLoading]
+    [barbers, booking, isLoading, isLoadingAppointments]
   );
 
-  if (isLoading && (!barbers.length || !services.length)) {
+  const isInitialLoading = isLoading || isLoadingBarbers || isLoadingServices || isLoadingAppointments;
+
+  if (isInitialLoading && (!barbers.length || !services.length)) {
     return <AppSkeleton />;
   }
 
@@ -464,6 +500,8 @@ function App() {
                 onBeginCreateService={() => staffPanel.setServiceEditorForm(staffPanel.createEmptyServiceDraft())}
                 serviceFeedback={staffPanel.serviceFeedback}
                 panelAppointments={staffPanel.panelAppointments}
+                panelDateFilter={staffPanel.panelDateFilter}
+                onPanelDateFilterChange={staffPanel.setPanelDateFilter}
                 hydrateAppointmentView={hydrateAppointmentView}
                 onStatusChange={staffPanel.handleStatusChange}
                 statusUpdateId={staffPanel.statusUpdateId}
@@ -618,6 +656,7 @@ function App() {
           ) : null}
         </motion.div>
       </AnimatePresence>
+      <Toast toast={toast} />
     </div>
   );
 }

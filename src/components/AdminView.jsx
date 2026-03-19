@@ -541,7 +541,8 @@ export function AdminView({
                     Status
                     <select value={editorForm.status} onChange={(event) => onEditorChange("status", event.target.value)}>
                       <option value="confirmed">Confirmado</option>
-                      <option value="completed">Concluido</option>
+                      <option value="in-progress">Em andamento</option>
+                      <option value="done">Concluido</option>
                       <option value="cancelled">Cancelado</option>
                     </select>
                   </label>
@@ -719,7 +720,8 @@ export function AdminView({
             <select value={adminStatusFilter} onChange={(event) => onAdminStatusFilterChange(event.target.value)}>
               <option value="all">Todos</option>
               <option value="confirmed">Confirmado</option>
-              <option value="completed">Concluido</option>
+              <option value="in-progress">Em andamento</option>
+              <option value="done">Concluido</option>
               <option value="cancelled">Cancelado</option>
             </select>
           </label>
@@ -746,7 +748,15 @@ export function AdminView({
                 <div className="admin-card-main">
                   <div className="admin-card-head">
                     <span className="tag">{appointment.id}</span>
-                    <span className={`status-pill ${appointment.status}`}>{appointment.status}</span>
+                    <span className={`status-pill ${appointment.status}`}>
+                      {appointment.status === "in-progress"
+                        ? "Em andamento"
+                        : appointment.status === "done" || appointment.status === "completed"
+                          ? "Concluido"
+                          : appointment.status === "cancelled"
+                            ? "Cancelado"
+                            : "Confirmado"}
+                    </span>
                   </div>
                   <h3>{appointment.clientName}</h3>
                   <p>{bookedServices.map((service) => service.name).join(", ")}</p>
@@ -771,8 +781,15 @@ export function AdminView({
                   </button>
                   <button
                     className="secondary-button"
-                    disabled={statusUpdateId === appointment.id || appointment.status === "completed"}
-                    onClick={() => onStatusChange(appointment.id, "completed")}
+                    disabled={statusUpdateId === appointment.id || appointment.status === "in-progress" || appointment.status === "done"}
+                    onClick={() => onStatusChange(appointment.id, "in-progress")}
+                  >
+                    {statusUpdateId === appointment.id ? "Atualizando..." : "Iniciar"}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={statusUpdateId === appointment.id || appointment.status === "done"}
+                    onClick={() => onStatusChange(appointment.id, "done")}
                   >
                     {statusUpdateId === appointment.id ? "Atualizando..." : "Concluir"}
                   </button>

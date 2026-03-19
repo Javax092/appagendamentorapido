@@ -1,11 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
 let clientInstance = null;
+// ALTERACAO: leitura centralizada das envs do cliente Supabase.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export function isSupabaseConfigured() {
-  return Boolean(
-    import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-  );
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
 
 export function getSupabaseClient() {
@@ -14,17 +15,13 @@ export function getSupabaseClient() {
   }
 
   if (!clientInstance) {
-    clientInstance = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-      {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true
-        }
+    clientInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
       }
-    );
+    });
   }
 
   return clientInstance;

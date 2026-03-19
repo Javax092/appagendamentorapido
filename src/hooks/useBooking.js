@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createAppointment, logAppEvent } from "../lib/api";
+import { logAppEvent } from "../lib/api";
 import { dateOptions } from "../app/constants";
 import {
   buildAppointmentEnd,
@@ -11,7 +11,16 @@ import {
 import { getBookingProgress, getBookingStatusMessage, getRecommendedSlots } from "../utils/booking";
 import { buildBookingMomentLabel, enrichSlotsWithHeatmap } from "../utils/experience";
 
-export function useBooking({ barbers, services, appointments, bookingEvents, scheduleBlocks, session, refreshData, hydrateAppointmentView }) {
+export function useBooking({
+  barbers,
+  services,
+  appointmentsApi,
+  scheduleBlocks,
+  session,
+  refreshData,
+  hydrateAppointmentView,
+  showToast
+}) {
   const [selectedBarberId, setSelectedBarberId] = useState("");
   const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
@@ -21,6 +30,7 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
   const [notes, setNotes] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!barbers.length) {
@@ -64,7 +74,8 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
   );
 
   const totals = useMemo(() => getServiceTotals(selectedServices), [selectedServices]);
-  const bookingSchedule = appointments.length ? appointments : bookingEvents;
+  // ALTERACAO: agenda consumida do hook useAppointments compartilhado pelo app.
+  const bookingSchedule = appointmentsApi.appointments;
 
   const availableSlots = useMemo(() => {
     if (!selectedBarber || !selectedServices.length) {
@@ -110,32 +121,44 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
     [clientName, selectedBarber?.name, selectedDate, selectedTime, summaryServices]
   );
 
-  function validateBookingForm() {
+  // ALTERACAO: validacao por campo para renderizar erros inline.
+  function validateForm() {
+    const errors = {};
+
     if (!selectedBarber) {
-      return "Selecione um profissional.";
+      errors.selectedBarberId = "Selecione um profissional.";
     }
 
     if (!selectedServices.length) {
-      return "Escolha pelo menos um servico.";
+      errors.selectedServiceIds = "Escolha pelo menos um servico.";
     }
 
     if (!selectedTime) {
-      return "Escolha um horario disponivel.";
+      errors.selectedTime = "Escolha um horario disponivel.";
     }
 
     if (clientName.trim().length < 3) {
-      return "Informe o nome do cliente.";
+      errors.clientName = "Informe o nome completo do cliente.";
     }
 
     if (!isValidWhatsapp(clientWhatsapp)) {
-      return "Informe um WhatsApp valido.";
+      errors.clientWhatsapp = "Informe um WhatsApp valido no formato (XX) XXXXX-XXXX.";
     }
 
-    return "";
+    setFieldErrors(errors);
+
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors
+    };
   }
 
-  const bookingValidationError = validateBookingForm();
-  const isBookingReady = !bookingValidationError;
+  const isBookingReady =
+    Boolean(selectedBarber) &&
+    selectedServices.length > 0 &&
+    Boolean(selectedTime) &&
+    clientName.trim().length >= 3 &&
+    isValidWhatsapp(clientWhatsapp);
   const bookingStatusMessage = useMemo(
     () =>
       getBookingStatusMessage({
@@ -156,46 +179,87 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
     setClientWhatsapp("");
     setNotes("");
     setConfirmation(null);
+    setFieldErrors({});
     onResetView?.("booking");
   }
 
+  // ALTERACAO: construcao isolada do payload do agendamento.
+  function buildAppointment() {
+    return {
+      barberId: selectedBarber.id,
+      clientName: clientName.trim(),
+      clientWhatsapp: clientWhatsapp.replace(/\D/g, ""),
+      serviceIds: selectedServiceIds,
+      date: selectedDate,
+      startTime: selectedTime,
+      endTime: buildAppointmentEnd(selectedTime, totals.totalDuration),
+      status: "confirmed",
+      totalPrice: totals.subtotal,
+      notes: notes.trim()
+    };
+  }
+
+  // ALTERACAO: construcao da view de confirmacao desacoplada da persistencia.
+  function buildConfirmationView(appointment) {
+    return hydrateAppointmentView(appointment);
+  }
+
+  function clearFieldError(field) {
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   async function handleConfirmBooking() {
-    const error = validateBookingForm();
-    if (error) {
-      window.alert(error);
-      return;
+    const validation = validateForm();
+    if (!validation.isValid) {
+      showToast?.({
+        type: "error",
+        title: "Revise os campos",
+        message: "Preencha os dados destacados para confirmar o agendamento."
+      });
+      return { ok: false, errors: validation.errors };
     }
 
     const selectedSlot = availableSlots.find((slot) => slot.value === selectedTime);
     if (!selectedSlot || selectedSlot.disabled) {
-      window.alert("Esse horario acabou de ficar indisponivel. Escolha outro slot para evitar conflito.");
+      setFieldErrors((current) => ({
+        ...current,
+        selectedTime: "Esse horario acabou de ficar indisponivel. Escolha outro slot."
+      }));
+      showToast?.({
+        type: "info",
+        title: "Horario indisponivel",
+        message: "Esse slot foi ocupado agora. Escolha outro horario para evitar conflito."
+      });
       return { ok: false };
     }
 
     setIsSaving(true);
 
     try {
-      const appointmentDraft = {
-        barberId: selectedBarber.id,
-        clientName: clientName.trim(),
-        clientWhatsapp: clientWhatsapp.replace(/\D/g, ""),
-        serviceIds: selectedServiceIds,
-        date: selectedDate,
-        startTime: selectedTime,
-        endTime: buildAppointmentEnd(selectedTime, totals.totalDuration),
-        status: "confirmed",
-        totalPrice: totals.subtotal,
-        notes: notes.trim()
-      };
+      const appointmentDraft = buildAppointment();
 
-      const persisted = await createAppointment(appointmentDraft);
+      const persisted = await appointmentsApi.addAppointment(appointmentDraft);
       await logAppEvent({
         eventType: "booking.created",
         message: `Reserva ${persisted.id} criada para ${appointmentDraft.clientName}`,
         context: { appointmentId: persisted.id, barberId: appointmentDraft.barberId }
       });
       await refreshData(session);
-      setConfirmation(hydrateAppointmentView({ ...appointmentDraft, id: persisted.id }));
+      setFieldErrors({});
+      setConfirmation(buildConfirmationView(persisted));
+      showToast?.({
+        type: "success",
+        title: "Reserva confirmada",
+        message: "O agendamento foi salvo com sucesso."
+      });
       return { ok: true };
     } catch (saveError) {
       await logAppEvent({
@@ -203,7 +267,11 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
         eventType: "booking.failed",
         message: saveError.message || "Falha ao salvar agendamento"
       });
-      window.alert(saveError.message || "Nao foi possivel salvar o agendamento.");
+      showToast?.({
+        type: "error",
+        title: "Falha ao salvar",
+        message: saveError.message || "Nao foi possivel salvar o agendamento."
+      });
       return { ok: false };
     } finally {
       setIsSaving(false);
@@ -228,6 +296,7 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
     setClientWhatsapp,
     notes,
     setNotes,
+    fieldErrors,
     confirmation,
     availableSlots,
     recommendedSlots,
@@ -238,6 +307,7 @@ export function useBooking({ barbers, services, appointments, bookingEvents, sch
     bookingMomentLabel,
     isBookingReady,
     isSaving,
+    clearFieldError,
     normalizeBookingWhatsapp: normalizeWhatsapp,
     handleConfirmBooking,
     resetBookingForm

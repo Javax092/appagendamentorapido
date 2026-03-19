@@ -1009,20 +1009,92 @@ a {
   color: #9af0c6;
 }
 
+.status-pill.in-progress {
+  border-color: rgba(240, 196, 114, 0.34);
+  background: rgba(240, 196, 114, 0.09);
+  color: #f6d490;
+}
+
 .status-pill.cancelled {
   border-color: rgba(255, 141, 132, 0.34);
   background: rgba(255, 141, 132, 0.08);
   color: #ffbdb7;
 }
 
+.status-pill.done,
 .status-pill.completed {
   border-color: rgba(129, 176, 165, 0.34);
   background: rgba(129, 176, 165, 0.08);
   color: #b8e5d9;
 }
 
+.field-error {
+  display: block;
+  margin-top: 6px;
+  color: #ff8d84;
+  font-size: 0.82rem;
+}
+
+.panel-filter-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 18px;
+}
+
+.panel-filter-row label {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 50;
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(16px);
+}
+
+.toast strong {
+  font-size: 0.94rem;
+}
+
+.toast span {
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.toast-success {
+  background: rgba(23, 58, 41, 0.92);
+  border-color: rgba(81, 196, 145, 0.34);
+  color: #d7f7e8;
+}
+
+.toast-error {
+  background: rgba(76, 28, 28, 0.94);
+  border-color: rgba(255, 141, 132, 0.34);
+  color: #ffd7d2;
+}
+
+.toast-info {
+  background: rgba(31, 38, 54, 0.94);
+  border-color: rgba(129, 176, 165, 0.34);
+  color: #dce7f0;
+}
+
 .admin-stats {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.panel-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .finance-strip {

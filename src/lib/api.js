@@ -21,7 +21,8 @@ const GALLERY_TABLE = "gallery_posts";
 const LOGS_TABLE = "app_event_logs";
 const NOTIFICATIONS_TABLE = "appointment_notifications";
 const PROFILES_TABLE = "staff_profiles";
-const SERVICES_TABLE = "barber_services";
+// ALTERACAO: camada de API alinhada com a nova tabela `services`.
+const SERVICES_TABLE = "services";
 const SESSION_KEY = "appmobilebarbearia.local-session";
 const DEFAULT_BUSINESS_WHATSAPP = "5592986202729";
 const MEDIA_BUCKET = "opaitaon-media";
@@ -121,11 +122,11 @@ function normalizeAppointment(row) {
     updatedAt: row.updated_at ?? row.updatedAt ?? row.created_at ?? row.createdAt,
     notes: row.notes ?? "",
     services: services.map((item) => ({
-      id: item.service_id ?? item.serviceId ?? item.id,
-      name: item.service_name ?? item.serviceName ?? item.name,
-      price: Number(item.price ?? 0),
-      duration: Number(item.duration ?? 0),
-      sortOrder: item.sort_order ?? item.sortOrder ?? 0
+      id: item.service_id ?? item.serviceId ?? item.id ?? item.services?.id ?? item.service?.id,
+      name: item.service_name ?? item.serviceName ?? item.name ?? item.services?.name ?? item.service?.name,
+      price: Number(item.price ?? item.services?.price ?? item.service?.price ?? 0),
+      duration: Number(item.duration ?? item.services?.duration ?? item.service?.duration ?? 0),
+      sortOrder: item.sort_order ?? item.sortOrder ?? item.services?.sort_order ?? item.service?.sortOrder ?? 0
     }))
   };
 }
@@ -280,7 +281,7 @@ async function fetchStaffData() {
     supabase
       .from("appointments")
       .select(
-        "id, barber_id, customer_id, client_name, client_whatsapp, date, start_time, end_time, status, total_price, notes, created_at, updated_at, appointment_services(service_id, service_name, price, duration, sort_order)"
+        "id, barber_id, customer_id, client_name, client_whatsapp, date, start_time, end_time, status, total_price, notes, created_at, updated_at, appointment_services(service_id, services(id, name, price, duration, sort_order))"
       )
       .order("date", { ascending: true })
       .order("start_time", { ascending: true }),
@@ -332,7 +333,7 @@ async function fetchFallbackStaffData() {
     supabase
       .from("appointments")
       .select(
-        "id, barber_id, customer_id, client_name, client_whatsapp, date, start_time, end_time, status, total_price, notes, created_at, updated_at, appointment_services(service_id, service_name, price, duration, sort_order)"
+        "id, barber_id, customer_id, client_name, client_whatsapp, date, start_time, end_time, status, total_price, notes, created_at, updated_at, appointment_services(service_id, services(id, name, price, duration, sort_order))"
       )
       .order("date", { ascending: true })
       .order("start_time", { ascending: true }),
@@ -615,23 +616,44 @@ export async function createAppointment(appointment) {
   }
 
   const supabase = getSupabaseClient();
-  const { data: appointmentId, error } = await supabase.rpc("book_public_appointment", {
-    input_barber_id: appointment.barberId,
-    input_client_name: appointment.clientName.trim(),
-    input_client_whatsapp: appointment.clientWhatsapp.trim(),
-    input_date: appointment.date,
-    input_start_time: `${appointment.startTime}:00`,
-    input_notes: appointment.notes?.trim() ?? "",
-    input_service_ids: appointment.serviceIds
-  });
+  // ALTERACAO: insert direto na tabela `appointments` + junction `appointment_services`.
+  const { data: insertedAppointment, error: appointmentError } = await supabase
+    .from("appointments")
+    .insert({
+      id: appointment.id,
+      barber_id: appointment.barberId,
+      client_name: appointment.clientName.trim(),
+      client_whatsapp: appointment.clientWhatsapp.trim(),
+      date: appointment.date,
+      start_time: `${appointment.startTime}:00`,
+      end_time: `${appointment.endTime}:00`,
+      status: appointment.status,
+      total_price: Number(appointment.totalPrice ?? 0),
+      notes: appointment.notes?.trim() ?? ""
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    throw error;
+  if (appointmentError) {
+    throw appointmentError;
+  }
+
+  if (appointment.serviceIds?.length) {
+    const { error: joinError } = await supabase.from("appointment_services").insert(
+      appointment.serviceIds.map((serviceId) => ({
+        appointment_id: insertedAppointment.id,
+        service_id: serviceId
+      }))
+    );
+
+    if (joinError) {
+      throw joinError;
+    }
   }
 
   return {
     source: "supabase",
-    id: appointmentId
+    id: insertedAppointment.id
   };
 }
 
@@ -644,25 +666,51 @@ export async function saveStaffAppointment(appointment) {
   }
 
   const supabase = getSupabaseClient();
-  const { data: appointmentId, error } = await supabase.rpc("save_staff_appointment", {
-    input_appointment_id: appointment.id,
-    input_barber_id: appointment.barberId,
-    input_client_name: appointment.clientName.trim(),
-    input_client_whatsapp: appointment.clientWhatsapp.trim(),
-    input_date: appointment.date,
-    input_start_time: `${appointment.startTime}:00`,
-    input_status: appointment.status,
-    input_notes: appointment.notes?.trim() ?? "",
-    input_service_ids: appointment.serviceIds
-  });
+  // ALTERACAO: update direto do agendamento e resincronizacao da tabela N:N.
+  const { error: updateError } = await supabase
+    .from("appointments")
+    .update({
+      barber_id: appointment.barberId,
+      client_name: appointment.clientName.trim(),
+      client_whatsapp: appointment.clientWhatsapp.trim(),
+      date: appointment.date,
+      start_time: `${appointment.startTime}:00`,
+      end_time: `${appointment.endTime}:00`,
+      status: appointment.status,
+      total_price: Number(appointment.totalPrice ?? 0),
+      notes: appointment.notes?.trim() ?? ""
+    })
+    .eq("id", appointment.id);
 
-  if (error) {
-    throw error;
+  if (updateError) {
+    throw updateError;
+  }
+
+  const { error: deleteJoinError } = await supabase
+    .from("appointment_services")
+    .delete()
+    .eq("appointment_id", appointment.id);
+
+  if (deleteJoinError) {
+    throw deleteJoinError;
+  }
+
+  if (appointment.serviceIds?.length) {
+    const { error: insertJoinError } = await supabase.from("appointment_services").insert(
+      appointment.serviceIds.map((serviceId) => ({
+        appointment_id: appointment.id,
+        service_id: serviceId
+      }))
+    );
+
+    if (insertJoinError) {
+      throw insertJoinError;
+    }
   }
 
   return {
     source: "supabase",
-    id: appointmentId
+    id: appointment.id
   };
 }
 
@@ -675,28 +723,12 @@ export async function updateAppointmentStatus(appointmentId, status, sessionProf
   }
 
   const supabase = getSupabaseClient();
-  if (sessionProfile?.authMode === "app_users") {
-    const { data, error } = await supabase.rpc("update_appointment_status_app_user", {
-      input_email: sessionProfile.email,
-      input_password: sessionProfile.fallbackSecret,
-      input_appointment_id: appointmentId,
-      input_status: status
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    return {
-      source: "supabase-app-users",
-      id: data
-    };
-  }
-
-  const { data, error } = await supabase.rpc("update_appointment_status", {
-    input_appointment_id: appointmentId,
-    input_status: status
-  });
+  const { data, error } = await supabase
+    .from("appointments")
+    .update({ status })
+    .eq("id", appointmentId)
+    .select("id")
+    .single();
 
   if (error) {
     throw error;
